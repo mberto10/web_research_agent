@@ -177,8 +177,8 @@ Each renderer enforces per‑section citation minima before emitting.
     * `sonar_first_look`, `exa_primary_news_search`, `exa_contents_focus`, `exa_find_similar`, `exa_answer_conflict`
     * Reuse via `include:` within YAML.
 
-**Status:** Phase 2 complete — YAML schema/loader, selector, initial strategy library, and macros implemented.
-**Next:** Phase 3 — Tool adapter registry.
+**Status:** Phase 4 complete — tool registry plus scope-phase categorizer and task splitter implemented.
+**Next:** Phase 5 — Research subgraph.
 
 > By driving **search type**, **category**, and date filters from YAML you exploit Exa’s strengths (news category, `keyword/neural/auto`) deterministically. ([Exa][8])
 
@@ -200,6 +200,8 @@ Each renderer enforces per‑section citation minima before emitting.
 
 15. **Categorizer** (small model or rules first): returns `{category, time_window, depth}` (structured JSON).
 16. **Task splitter**: deterministic sub‑topic extraction (cap N); produce `tasks[]` and per‑task query variables.
+
+*Implementation:* Keyword rules map requests to existing strategy dimensions, and a delimiter-based splitter expands `tasks[]` and mirrored `queries[]`.
 
 ### Phase 5 — Research subgraph
 
