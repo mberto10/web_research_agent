@@ -4,6 +4,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from datetime import datetime
+import re
 from urllib.parse import urlparse, urlunparse
 from typing import Dict, List
 
@@ -171,16 +172,81 @@ def write(state: State) -> State:
     return state
 
 
+def qc(state: State) -> State:
+    """Lightweight QC checks on structure, citations, and quorum."""
+    if not state.strategy_slug:
+        return state
+
+    strategy = load_strategy(state.strategy_slug)
+    errors: list[str] = []
+
+    # Structure check -----------------------------------------------------
+    render_cfg = strategy.render or {}
+    section_names = render_cfg.get("sections", [])
+    for name in section_names:
+        if not any(sec.startswith(f"## {name}") for sec in state.sections):
+            errors.append(f"missing section: {name}")
+
+    # Citation check ------------------------------------------------------
+    if section_names and len(state.citations) < len(section_names):
+        errors.append("insufficient citations")
+    if len(state.citations) != len(set(state.citations)):
+        errors.append("duplicate citations")
+
+    recency = (strategy.filters or {}).get("recency")
+    if recency:
+        max_days = {
+            "day": 1,
+            "week": 7,
+            "month": 30,
+            "year": 365,
+        }.get(recency)
+        if max_days:
+            today = datetime.utcnow().date()
+            for ev in state.evidence:
+                if ev.date:
+                    try:
+                        dt = datetime.fromisoformat(ev.date.split("T")[0]).date()
+                        if (today - dt).days > max_days:
+                            errors.append(f"out of time window: {ev.url}")
+                            break
+                    except Exception:
+                        continue
+
+    # Quorum check -------------------------------------------------------
+    quorum = strategy.quorum or {}
+    min_sources = quorum.get("min_sources")
+    if min_sources:
+        unique_urls = {ev.url for ev in state.evidence}
+        if len(unique_urls) < min_sources:
+            errors.append("insufficient sources")
+
+    # Optional quick contradiction ping ---------------------------------
+    numbers: set[str] = set()
+    for ev in state.evidence:
+        if ev.snippet:
+            numbers.update(re.findall(r"\b\d+(?:\.\d+)?\b", ev.snippet))
+    if len(numbers) > 1:
+        state.limitations.append("potential numeric contradiction across sources")
+
+    if errors:
+        state.errors.extend(errors)
+        state.limitations.append("qc-lite detected issues")
+    return state
+
+
 def build_graph() -> StateGraph:
     """Construct the LangGraph workflow."""
     builder = StateGraph(State)
     builder.add_node("scope", scope)
     builder.add_node("research", research)
     builder.add_node("write", write)
+    builder.add_node("qc", qc)
 
     builder.set_entry_point("scope")
     builder.add_edge("scope", "research")
     builder.add_edge("research", "write")
-    builder.add_edge("write", END)
+    builder.add_edge("write", "qc")
+    builder.add_edge("qc", END)
 
     return builder.compile(checkpointer=MemorySaver())
