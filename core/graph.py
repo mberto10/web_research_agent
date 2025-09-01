@@ -11,6 +11,7 @@ from .state import State, Evidence
 from .scope import categorize_request, split_tasks
 from strategies import load_strategy, select_strategy
 from tools import get_tool
+from renderers import get_renderer
 
 
 def _render_template(template: str, variables: Dict[str, str]) -> str:
@@ -152,7 +153,21 @@ def research(state: State) -> State:
 
 
 def write(state: State) -> State:
-    """Placeholder write phase."""
+    """Render sections and assemble citations based on strategy."""
+    if not state.strategy_slug:
+        return state
+
+    strategy = load_strategy(state.strategy_slug)
+    render_cfg = strategy.render or {}
+    renderer_type = render_cfg.get("type")
+    section_names = render_cfg.get("sections", [])
+    if not renderer_type:
+        return state
+
+    renderer = get_renderer(renderer_type)
+    result = renderer.render(section_names, state.evidence)
+    state.sections.extend(result.get("sections", []))
+    state.citations.extend(result.get("citations", []))
     return state
 
 

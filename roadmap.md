@@ -178,7 +178,7 @@ Each renderer enforces per‑section citation minima before emitting.
     * Reuse via `include:` within YAML.
 
 **Status:** Phase 5 complete — research subgraph executes YAML-defined tool chains with query templating, evidence scoring, dedupe, and per-task budgets.
-**Next:** Phase 6 — Write phase & renderers.
+**Next:** Phase 7 — QC‑lite.
 
 > By driving **search type**, **category**, and date filters from YAML you exploit Exa’s strengths (news category, `keyword/neural/auto`) deterministically. ([Exa][8])
 
@@ -212,11 +212,11 @@ Each renderer enforces per‑section citation minima before emitting.
 
 *Implementation:* `core.graph.research` now iterates through each task's tool chain, renders query templates, normalizes URLs with scoring and deduplication, and trims results using `limits.max_results`.
 
-### Phase 6 — Write phase & renderers
+### Phase 6 — Write phase & renderers *(completed)*
 
-21. **Renderer contracts** (briefing, memo, fact‑check, Q\&A, JSON).
-22. **Templates** use deterministic section headings and boilerplate; the writer model fills slots (low temperature).
-23. **Citations assembly**: per‑section list from `evidence[]` (publisher + date + URL); never cite “Perplexity/Sonar”—only the underlying source URLs. (Sonar is OpenAI‑compatible but returns citations you can parse.) ([Perplexity][3])
+21. Renderer contracts implemented for briefing, memo, dossier, fact‑check, Q\&A, and JSON outputs.
+22. Templates render deterministic section headings with bullet summaries.
+23. Citations assembled from `evidence[]` with publisher, date, and URL, avoiding Sonar as a cited source.
 
 ### Phase 7 — QC‑lite
 
