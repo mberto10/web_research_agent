@@ -4,11 +4,25 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from .state import State
+from .scope import categorize_request, split_tasks
 from strategies import load_strategy, select_strategy
 
 
 def scope(state: State) -> State:
-    """Scope phase selects a strategy based on state fields."""
+    """Scope phase categorizes the request and selects a strategy."""
+    # Categorize if needed
+    if not (state.category and state.time_window and state.depth):
+        cat = categorize_request(state.user_request)
+        state.category = state.category or cat["category"]
+        state.time_window = state.time_window or cat["time_window"]
+        state.depth = state.depth or cat["depth"]
+
+    # Split into sub-tasks if not already present
+    if not state.tasks:
+        state.tasks = split_tasks(state.user_request)
+        state.queries = list(state.tasks)
+
+    # Select strategy
     if (
         state.strategy_slug is None
         and state.category
