@@ -1,0 +1,27 @@
+meta:
+  slug: company/dossier
+  version: 1
+  category: company
+  time_window: month
+  depth: deep
+tool_chain:
+  - include: exa_primary_news_search
+  - include: exa_contents_focus
+queries:
+  exa_search: "{{topic}} company profile"
+filters:
+  recency: month
+  domains:
+    allow:
+      - official
+quorum:
+  min_sources: 3
+  require_official: true
+render:
+  type: dossier
+  sections:
+    - overview
+    - financials
+    - news
+limits:
+  max_results: 10

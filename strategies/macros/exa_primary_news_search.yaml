@@ -1,0 +1,5 @@
+name: exa_search_primary
+params:
+  type: auto
+  category: news
+  date_window: day
