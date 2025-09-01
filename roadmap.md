@@ -177,8 +177,8 @@ Each renderer enforces per‑section citation minima before emitting.
     * `sonar_first_look`, `exa_primary_news_search`, `exa_contents_focus`, `exa_find_similar`, `exa_answer_conflict`
     * Reuse via `include:` within YAML.
 
-**Status:** Phase 5 complete — research subgraph executes YAML-defined tool chains with query templating, evidence scoring, dedupe, and per-task budgets.
-**Next:** Phase 7 — QC‑lite.
+**Status:** Phase 7 complete — QC‑lite checks ensure structure, citations, and source quorum.
+**Next:** Phase 8 — Delivery & sinks.
 
 > By driving **search type**, **category**, and date filters from YAML you exploit Exa’s strengths (news category, `keyword/neural/auto`) deterministically. ([Exa][8])
 
@@ -218,7 +218,7 @@ Each renderer enforces per‑section citation minima before emitting.
 22. Templates render deterministic section headings with bullet summaries.
 23. Citations assembled from `evidence[]` with publisher, date, and URL, avoiding Sonar as a cited source.
 
-### Phase 7 — QC‑lite
+### Phase 7 — QC‑lite *(completed)*
 
 24. **Structure check**: sections required by renderer present.
 25. **Citation check**: ≥1 URL per section; dedupe; dates present when available; all URLs in time window.
