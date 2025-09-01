@@ -57,3 +57,31 @@ def test_qc_records_errors(monkeypatch):
     new_state = qc(state)
     assert any("missing section" in e for e in new_state.errors)
     assert any("insufficient sources" in e for e in new_state.errors)
+
+
+def test_qc_llm_warnings(monkeypatch):
+    strategy = _make_strategy()
+    monkeypatch.setattr(strategies, "load_strategy", lambda slug: strategy)
+    monkeypatch.setattr(graph_module, "load_strategy", lambda slug: strategy)
+
+    def fake_llm(sections, citations):
+        return {
+            "grounded": False,
+            "warnings": ["check facts"],
+            "inconsistencies": ["unsupported claim"],
+        }
+
+    monkeypatch.setattr(graph_module, "_qc_llm", fake_llm)
+
+    today = datetime.utcnow().date().isoformat()
+    state = State(
+        user_request="test",
+        strategy_slug="test",
+        sections=["## summary"],
+        citations=[f"A ({today}) http://a.com"],
+        evidence=[Evidence(url="http://a.com", date=today)],
+    )
+    new_state = qc(state)
+    assert "unsupported claim" in new_state.errors
+    assert "check facts" in new_state.limitations
+    assert any("model flagged" in l for l in new_state.limitations)
