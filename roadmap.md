@@ -161,6 +161,8 @@ Each renderer enforces per‑section citation minima before emitting.
 5. **Reducers** for `evidence[]`, `citations[]`, `sections[]`. Leverage LangGraph **Graph API** patterns. ([LangChain Docs][1])
 6. **Compile graph with a checkpointer** (Memory or SQLite) for durability and replay—even though QC is lightweight, persistence is useful for debugging. ([LangChain][2])
 
+**Status:** Phase 1 complete
+
 ### Phase 2 — YAML strategy system (no vector store)
 
 7. **YAML schema & loader** (with JSON Schema validation).
