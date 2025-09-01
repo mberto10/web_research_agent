@@ -4,9 +4,11 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from datetime import datetime
+import json
+import os
 import re
 from urllib.parse import urlparse, urlunparse
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from .state import State, Evidence
 from .scope import categorize_request, split_tasks
@@ -172,6 +174,47 @@ def write(state: State) -> State:
     return state
 
 
+def _qc_llm(sections: List[str], citations: List[str]) -> Dict[str, Any]:
+    """Call an LLM to verify factual grounding."""
+    try:
+        from openai import OpenAI  # type: ignore
+    except Exception:
+        return {}
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return {}
+
+    client = OpenAI(api_key=api_key)
+    model = os.getenv("QC_MODEL", "gpt-4o-mini")
+    system = (
+        "You check whether report sections are grounded in the provided citations. "
+        "Respond in JSON with keys 'grounded' (boolean), 'warnings' (list of strings), "
+        "and 'inconsistencies' (list of strings)."
+    )
+    user = f"Sections:\n{chr(10).join(sections)}\n\nCitations:\n{chr(10).join(citations)}"
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0,
+            response_format={"type": "json_object"},
+        )
+        choice = resp["choices"][0] if isinstance(resp, dict) else resp.choices[0]
+        message = choice["message"] if isinstance(choice, dict) else choice.message
+        content = (
+            message.get("content")
+            if isinstance(message, dict)
+            else getattr(message, "content", "{}")
+        )
+        return json.loads(content)
+    except Exception:
+        return {}
+
+
 def qc(state: State) -> State:
     """Lightweight QC checks on structure, citations, and quorum."""
     if not state.strategy_slug:
@@ -228,6 +271,18 @@ def qc(state: State) -> State:
             numbers.update(re.findall(r"\b\d+(?:\.\d+)?\b", ev.snippet))
     if len(numbers) > 1:
         state.limitations.append("potential numeric contradiction across sources")
+
+    # LLM grounding check ------------------------------------------------
+    if state.sections and state.citations:
+        result = _qc_llm(state.sections, state.citations)
+        warnings = result.get("warnings") or []
+        if warnings:
+            state.limitations.extend(warnings)
+        inconsistencies = result.get("inconsistencies") or []
+        if inconsistencies:
+            state.errors.extend(inconsistencies)
+        if result.get("grounded") is False:
+            state.limitations.append("model flagged potential ungrounded content")
 
     if errors:
         state.errors.extend(errors)
