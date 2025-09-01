@@ -17,6 +17,20 @@ from tools import get_tool
 from renderers import get_renderer
 
 
+def _cluster_llm(prompt: str) -> str:
+    """Call an LLM to cluster evidence and return the raw text response."""
+    from openai import OpenAI  # Lazy import to keep optional dependency
+
+    client = OpenAI()
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    choice = response["choices"][0] if isinstance(response, dict) else response.choices[0]
+    message = choice["message"] if isinstance(choice, dict) else choice.message
+    return message.get("content") if isinstance(message, dict) else message.content
+
+
 def _render_template(template: str, variables: Dict[str, str]) -> str:
     """Very small Jinja-like template renderer."""
     result = template
@@ -236,6 +250,30 @@ def research(state: State) -> State:
     return state
 
 
+def summarize(state: State) -> State:
+    """Cluster evidence with an LLM and store bullet summaries."""
+    if not state.evidence:
+        return state
+
+    # Prepare prompt with key evidence lines
+    lines = []
+    for ev in state.evidence:
+        desc = ev.title or ev.snippet or ev.url
+        lines.append(f"- {desc}")
+    prompt = (
+        "Cluster the following evidence into topical groups and provide a brief bullet "
+        "summary for each cluster:\n" + "\n".join(lines)
+    )
+    output = _cluster_llm(prompt)
+    bullets = [
+        line.lstrip("- ").strip()
+        for line in output.splitlines()
+        if line.strip().startswith("-")
+    ]
+    state.summaries = bullets
+    return state
+
+
 def write(state: State) -> State:
     """Render sections and assemble citations based on strategy."""
     if not state.strategy_slug:
@@ -323,12 +361,14 @@ def build_graph() -> StateGraph:
     builder = StateGraph(State)
     builder.add_node("scope", scope)
     builder.add_node("research", research)
+    builder.add_node("summarize", summarize)
     builder.add_node("write", write)
     builder.add_node("qc", qc)
 
     builder.set_entry_point("scope")
     builder.add_edge("scope", "research")
-    builder.add_edge("research", "write")
+    builder.add_edge("research", "summarize")
+    builder.add_edge("summarize", "write")
     builder.add_edge("write", "qc")
     builder.add_edge("qc", END)
 
