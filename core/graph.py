@@ -3,9 +3,60 @@ from __future__ import annotations
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
-from .state import State
+from datetime import datetime
+from urllib.parse import urlparse, urlunparse
+from typing import Dict, List
+
+from .state import State, Evidence
 from .scope import categorize_request, split_tasks
 from strategies import load_strategy, select_strategy
+from tools import get_tool
+
+
+def _render_template(template: str, variables: Dict[str, str]) -> str:
+    """Very small Jinja-like template renderer."""
+    result = template
+    for key, value in variables.items():
+        result = result.replace(f"{{{{{key}}}}}", value)
+    return result
+
+
+def _canonical_url(url: str) -> str:
+    """Normalize URLs for deduplication."""
+    parsed = urlparse(url)
+    clean_path = parsed.path.rstrip("/")
+    return urlunparse((parsed.scheme, parsed.netloc, clean_path, "", "", ""))
+
+
+def _dedupe_and_score(evidence: List[Evidence], limit: int | None) -> List[Evidence]:
+    """Dedupe by canonical URL and apply simple scoring and budget."""
+    deduped: Dict[str, Evidence] = {}
+    for ev in evidence:
+        key = _canonical_url(ev.url)
+        current = deduped.get(key)
+        if current is None or (ev.score or 0.0) > (current.score or 0.0):
+            deduped[key] = ev
+
+    # Apply recency decay and sort
+    today = datetime.utcnow().date()
+    scored: List[Evidence] = []
+    for ev in deduped.values():
+        recency = 1.0
+        if ev.date:
+            try:
+                dt = datetime.fromisoformat(ev.date.split("T")[0]).date()
+                days = max((today - dt).days, 0)
+                recency = 1 / (1 + days)
+            except Exception:
+                recency = 1.0
+        base = ev.score or 0.0
+        ev.score = base + recency
+        scored.append(ev)
+
+    scored.sort(key=lambda e: e.score or 0.0, reverse=True)
+    if limit is not None:
+        scored = scored[:limit]
+    return scored
 
 
 def scope(state: State) -> State:
@@ -38,7 +89,65 @@ def scope(state: State) -> State:
 
 
 def research(state: State) -> State:
-    """Placeholder research phase."""
+    """Execute the research phase based on the selected strategy."""
+    if not state.strategy_slug or not state.tasks:
+        return state
+
+    strategy = load_strategy(state.strategy_slug)
+    max_results = strategy.limits.get("max_results") if strategy.limits else None
+
+    for task in state.tasks:
+        variables = {
+            "topic": task,
+            "subtopic": task,
+            "time_window": state.time_window or "",
+            "region": "",
+        }
+        task_evidence: List[Evidence] = []
+        last_results: List[Evidence] = []
+
+        for step in strategy.tool_chain:
+            tool_name = "sonar" if step.name.startswith("sonar") else "exa"
+            tool = get_tool(tool_name)
+
+            if step.name.startswith("sonar"):
+                query_t = strategy.queries.get("sonar", "{{topic}}")
+                prompt = _render_template(query_t, variables)
+                results = tool.call(prompt, **step.params)
+            elif step.name.startswith("exa_search"):
+                query_t = strategy.queries.get("exa_search", "{{topic}}")
+                query = _render_template(query_t, variables)
+                results = tool.call(query, **step.params)
+                last_results = results
+            elif step.name.startswith("exa_contents"):
+                top_k = step.params.get("top_k", 0)
+                results = []
+                for ev in last_results[:top_k]:
+                    content = tool.contents(ev.url, **{k: v for k, v in step.params.items() if k != "top_k"})
+                    if content.snippet:
+                        ev.snippet = content.snippet
+                    results.append(ev)
+            elif step.name.startswith("exa_find_similar"):
+                results = []
+                if last_results:
+                    seed = last_results[0].url
+                    results = tool.find_similar(seed, **step.params)
+            elif step.name.startswith("exa_answer"):
+                # ``answer`` returns text; we ignore for now in evidence gathering
+                query_t = strategy.queries.get("exa_answer", "{{topic}}")
+                query = _render_template(query_t, variables)
+                tool.answer(query, **step.params)
+                results = []
+            else:
+                results = []
+
+            task_evidence.extend(results)
+
+        processed = _dedupe_and_score(task_evidence, max_results)
+        state.evidence.extend(processed)
+
+    # Global dedupe after processing all tasks
+    state.evidence = _dedupe_and_score(state.evidence, max_results)
     return state
 
 

@@ -177,8 +177,8 @@ Each renderer enforces per‑section citation minima before emitting.
     * `sonar_first_look`, `exa_primary_news_search`, `exa_contents_focus`, `exa_find_similar`, `exa_answer_conflict`
     * Reuse via `include:` within YAML.
 
-**Status:** Phase 4 complete — tool registry plus scope-phase categorizer and task splitter implemented.
-**Next:** Phase 5 — Research subgraph.
+**Status:** Phase 5 complete — research subgraph executes YAML-defined tool chains with query templating, evidence scoring, dedupe, and per-task budgets.
+**Next:** Phase 6 — Write phase & renderers.
 
 > By driving **search type**, **category**, and date filters from YAML you exploit Exa’s strengths (news category, `keyword/neural/auto`) deterministically. ([Exa][8])
 
@@ -209,6 +209,8 @@ Each renderer enforces per‑section citation minima before emitting.
 18. **Query templating**: fill Jinja‑like templates using `{topic, subtopic, time_window, region}` consistently (no LLM improvisation).
 19. **Scoring & dedupe**: domain authority weights, recency decay, canonical URL normalization.
 20. **Evidence budget**: cap `evidence[]` per task to keep the write phase small.
+
+*Implementation:* `core.graph.research` now iterates through each task's tool chain, renders query templates, normalizes URLs with scoring and deduplication, and trims results using `limits.max_results`.
 
 ### Phase 6 — Write phase & renderers
 
