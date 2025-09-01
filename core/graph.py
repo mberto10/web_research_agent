@@ -4,10 +4,22 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from .state import State
+from strategies import load_strategy, select_strategy
 
 
 def scope(state: State) -> State:
-    """Placeholder scope phase."""
+    """Scope phase selects a strategy based on state fields."""
+    if (
+        state.strategy_slug is None
+        and state.category
+        and state.time_window
+        and state.depth
+    ):
+        slug = select_strategy(state.category, state.time_window, state.depth)
+        if slug:
+            state.strategy_slug = slug
+            # Load strategy to surface validation errors early.
+            load_strategy(slug)
     return state
 
 

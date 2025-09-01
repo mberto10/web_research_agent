@@ -167,13 +167,16 @@ Each renderer enforces per‑section citation minima before emitting.
 8. **Strategy selector** (pure function): `(category, time_window, depth) -> strategy_slug`.
 9. **Strategy library MVP**:
 
-   * `news/real_time_briefing.yaml` (Sonar→Exa flow; strict time window)
-   * `general/week_overview.yaml` (broader Exa window, optional Sonar)
-   * `company/dossier.yaml` (Exa keyword + official sites bias)
+ * `news/real_time_briefing.yaml` (Sonar→Exa flow; strict time window)
+  * `general/week_overview.yaml` (broader Exa window, optional Sonar)
+  * `company/dossier.yaml` (Exa keyword + official sites bias)
 10. **Macros/partials**: Extract common blocks:
 
     * `sonar_first_look`, `exa_primary_news_search`, `exa_contents_focus`, `exa_find_similar`, `exa_answer_conflict`
     * Reuse via `include:` within YAML.
+
+**Status:** Phase 2 complete — YAML schema/loader, selector, initial strategy library, and macros implemented.
+**Next:** Phase 3 — Tool adapter registry.
 
 > By driving **search type**, **category**, and date filters from YAML you exploit Exa’s strengths (news category, `keyword/neural/auto`) deterministically. ([Exa][8])
 

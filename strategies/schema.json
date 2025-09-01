@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["meta", "tool_chain"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["slug", "version", "category", "time_window", "depth"],
+      "properties": {
+        "slug": {"type": "string"},
+        "version": {"type": "integer"},
+        "category": {"type": "string"},
+        "time_window": {"type": "string"},
+        "depth": {"type": "string"}
+      }
+    },
+    "tool_chain": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string"},
+          "params": {"type": "object"},
+          "loop": {"type": "integer"}
+        }
+      }
+    },
+    "queries": {"type": "object"},
+    "filters": {"type": "object"},
+    "quorum": {"type": "object"},
+    "render": {"type": "object"},
+    "limits": {"type": "object"}
+  }
+}

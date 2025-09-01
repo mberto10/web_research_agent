@@ -1,0 +1,4 @@
+name: sonar_snapshot
+params:
+  model: sonar
+  recency: day
