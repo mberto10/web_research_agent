@@ -1,0 +1,20 @@
+[project]
+name = "web_research_agent"
+version = "0.1.0"
+description = "Deterministic research agent built with LangGraph"
+authors = [{ name = "Your Name" }]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "langgraph>=0.6",
+  "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+exa = ["exa-py"]
+sonar = ["openai"]
+all = ["exa-py", "openai"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
