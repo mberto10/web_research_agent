@@ -43,6 +43,7 @@ def setup(monkeypatch, strategy):
     register_tool(DummyExa())
     monkeypatch.setattr(strategies, "load_strategy", lambda slug: strategy)
     monkeypatch.setattr(graph_module, "load_strategy", lambda slug: strategy)
+    monkeypatch.setattr(graph_module, "_refine_queries_with_llm", lambda *a, **k: {})
 
 
 def test_research_dedupes(monkeypatch):
@@ -62,3 +63,37 @@ def test_research_respects_budget(monkeypatch):
     new_state = research(state)
     assert len(new_state.evidence) == 1
     assert new_state.evidence[0].url == "http://a.com"
+
+
+def test_research_refines_queries(monkeypatch):
+    strategy = make_strategy(max_results=10)
+    strategy.tool_chain = [
+        ToolStep(name="exa_search_primary"),
+        ToolStep(name="exa_search_primary"),
+    ]
+
+    queries_seen: list[str] = []
+
+    class RecordingExa(DummyExa):
+        def call(self, query: str, **params):
+            queries_seen.append(query)
+            return super().call(query, **params)
+
+    from tools import registry as reg
+    import core.graph as graph_module
+
+    monkeypatch.setattr(reg, "_tool_registry", {})
+    register_tool(DummySonar())
+    register_tool(RecordingExa())
+    monkeypatch.setattr(strategies, "load_strategy", lambda slug: strategy)
+    monkeypatch.setattr(graph_module, "load_strategy", lambda slug: strategy)
+    monkeypatch.setattr(
+        graph_module,
+        "_refine_queries_with_llm",
+        lambda *a, **k: {"exa_search": "{{topic}} refined"},
+    )
+
+    state = State(user_request="test", tasks=["alpha"], strategy_slug="test")
+    research(state)
+
+    assert queries_seen == ["alpha news", "alpha refined"]
