@@ -4,6 +4,8 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from datetime import datetime
+import json
+import os
 import re
 from urllib.parse import urlparse, urlunparse
 from typing import Dict, List
@@ -75,6 +77,70 @@ def _dedupe_and_score(evidence: List[Evidence], limit: int | None) -> List[Evide
     return scored
 
 
+def _step_query_key(name: str) -> str | None:
+    """Map a tool step name to its query dictionary key."""
+    if name.startswith("sonar"):
+        return "sonar"
+    if name.startswith("exa_search"):
+        return "exa_search"
+    if name.startswith("exa_answer"):
+        return "exa_answer"
+    return None
+
+
+def _refine_queries_with_llm(
+    last_results: List[Evidence],
+    allowed_keys: List[str],
+    max_queries: int | None = None,
+) -> Dict[str, str]:
+    """Use an LLM to suggest refined queries based on recent results."""
+    if not last_results or not allowed_keys:
+        return {}
+
+    snippets: List[str] = []
+    for ev in last_results:
+        if ev.snippet:
+            snippets.append(ev.snippet)
+        elif ev.title:
+            snippets.append(ev.title)
+        if len(snippets) >= 3:
+            break
+    if not snippets:
+        return {}
+
+    prompt = (
+        "Given the following snippets:\n"
+        + "\n".join(f"- {s}" for s in snippets)
+        + "\nSuggest refined or follow-up search queries for the following tools: "
+        + ", ".join(allowed_keys)
+        + ". Return a JSON object mapping tool names to query strings."
+    )
+
+    try:
+        from openai import OpenAI  # Imported lazily
+
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        content = response.choices[0].message["content"]
+        data = json.loads(content)
+    except Exception:
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    refined: Dict[str, str] = {}
+    for key in allowed_keys:
+        if key in data:
+            refined[key] = data[key]
+            if max_queries is not None and len(refined) >= max_queries:
+                break
+    return refined
+
+
 def scope(state: State) -> State:
     """Scope phase categorizes the request and selects a strategy."""
     # Categorize if needed
@@ -111,6 +177,7 @@ def research(state: State) -> State:
 
     strategy = load_strategy(state.strategy_slug)
     max_results = strategy.limits.get("max_results") if strategy.limits else None
+    max_llm_queries = strategy.limits.get("max_llm_queries") if strategy.limits else None
 
     for task in state.tasks:
         variables = {
@@ -122,7 +189,7 @@ def research(state: State) -> State:
         task_evidence: List[Evidence] = []
         last_results: List[Evidence] = []
 
-        for step in strategy.tool_chain:
+        for idx, step in enumerate(strategy.tool_chain):
             tool_name = "sonar" if step.name.startswith("sonar") else "exa"
             tool = get_tool(tool_name)
 
@@ -130,6 +197,7 @@ def research(state: State) -> State:
                 query_t = strategy.queries.get("sonar", "{{topic}}")
                 prompt = _render_template(query_t, variables)
                 results = tool.call(prompt, **step.params)
+                last_results = results
             elif step.name.startswith("exa_search"):
                 query_t = strategy.queries.get("exa_search", "{{topic}}")
                 query = _render_template(query_t, variables)
@@ -139,15 +207,19 @@ def research(state: State) -> State:
                 top_k = step.params.get("top_k", 0)
                 results = []
                 for ev in last_results[:top_k]:
-                    content = tool.contents(ev.url, **{k: v for k, v in step.params.items() if k != "top_k"})
+                    content = tool.contents(
+                        ev.url, **{k: v for k, v in step.params.items() if k != "top_k"}
+                    )
                     if content.snippet:
                         ev.snippet = content.snippet
                     results.append(ev)
+                last_results = results
             elif step.name.startswith("exa_find_similar"):
                 results = []
                 if last_results:
                     seed = last_results[0].url
                     results = tool.find_similar(seed, **step.params)
+                last_results = results
             elif step.name.startswith("exa_answer"):
                 # ``answer`` returns text; we ignore for now in evidence gathering
                 query_t = strategy.queries.get("exa_answer", "{{topic}}")
@@ -158,6 +230,17 @@ def research(state: State) -> State:
                 results = []
 
             task_evidence.extend(results)
+
+            remaining = strategy.tool_chain[idx + 1 :]
+            allowed_keys = [
+                k for k in (_step_query_key(s.name) for s in remaining) if k
+            ]
+            if last_results and allowed_keys:
+                suggestions = _refine_queries_with_llm(
+                    last_results, allowed_keys, max_llm_queries
+                )
+                for key, val in suggestions.items():
+                    strategy.queries[key] = val
 
         processed = _dedupe_and_score(task_evidence, max_results)
         state.evidence.extend(processed)
