@@ -1,0 +1,85 @@
+# Example strategy demonstrating ALL available Sonar API parameters
+# This is a reference implementation showing every configurable option
+
+meta:
+  slug: example_sonar_full
+  version: 1
+  category: example
+  time_window: custom
+  depth: deep
+
+queries:
+  sonar: "{{topic}} {{custom_query}}"
+
+tool_chain:
+  # Complete Sonar configuration example
+  - name: sonar_complete_example
+    params:
+      # Core message parameters
+      system_prompt: |
+        Custom system prompt to guide the AI's behavior.
+        You can make it multi-line and very specific to your use case.
+        This sets the context and tone for all responses.
+      
+      # Search configuration
+      search_mode: "web"              # Options: "web" (default) or "academic"
+      search_domain_filter:            # Limit to specific domains (max 20)
+        - "example.com"
+        - "trusted-source.org"
+        - "official-site.gov"
+      search_recency_filter: "week"   # Options: "day", "week", "month", "year"
+      
+      # Response configuration
+      max_tokens: 2000                # Maximum tokens in response
+      temperature: 0.3                 # 0-2, controls randomness (default 0.2)
+      top_p: 0.9                      # 0-1, nucleus sampling (default 0.9)
+      
+      # Additional options
+      return_images: true              # Include images in search results
+      return_related_questions: true   # Return related questions
+      stream: false                    # Enable streaming response
+      
+      # Advanced options (use with caution)
+      disable_search: false            # Disable web search entirely
+      enable_search_classifier: false  # Enable search result classification
+      
+      # For sonar-deep-research model only
+      reasoning_effort: "medium"       # Options: "low", "medium", "high"
+      
+      # Legacy/compatibility
+      max_results: 10                 # Maps to internal result limits
+
+  # Example: Academic search variant
+  - name: sonar_academic_search
+    params:
+      system_prompt: "Focus on peer-reviewed academic sources and research papers."
+      search_mode: "academic"
+      search_recency_filter: "year"
+      temperature: 0.1              # Very low for accuracy
+      max_tokens: 3000             # Higher limit for detailed academic content
+
+  # Example: News-focused search
+  - name: sonar_news_search
+    params:
+      system_prompt: "Focus on breaking news and recent developments. Include timestamps."
+      search_mode: "web"
+      search_domain_filter:
+        - "reuters.com"
+        - "apnews.com"
+        - "bbc.com"
+      search_recency_filter: "day"
+      return_related_questions: true
+      temperature: 0.2
+
+  # Example: Minimal configuration (relies on defaults)
+  - name: sonar_minimal
+    params:
+      max_results: 5               # Only specify what differs from defaults
+
+limits:
+  max_results: 50
+  max_llm_queries: 5
+
+render:
+  type: markdown
+  sections: []

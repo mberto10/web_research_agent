@@ -32,9 +32,6 @@ class ResearchState(BaseModel):
     evidence: Annotated[List[Evidence], operator.add] = Field(default_factory=list)
 
 
-class SummaryState(BaseModel):
-    """State fields generated after clustering evidence."""
-    summaries: Annotated[List[str], operator.add] = Field(default_factory=list)
 
 
 class WriteState(BaseModel):
@@ -43,8 +40,10 @@ class WriteState(BaseModel):
     citations: Annotated[List[str], operator.add] = Field(default_factory=list)
     limitations: List[str] = Field(default_factory=list)
     errors: List[str] = Field(default_factory=list)
+    # Runtime vars and counters
+    vars: dict = Field(default_factory=dict)
 
 
-class State(ScopeState, ResearchState, SummaryState, WriteState):
+class State(ScopeState, ResearchState, WriteState):
     """Combined application state."""
     pass

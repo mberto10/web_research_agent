@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python test_daily_briefing.py)",
+      "Bash(python:*)",
+      "WebSearch",
+      "Bash(rmdir:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:docs.perplexity.ai)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:docs.exa.ai)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:platform.openai.com)",
+      "Bash(set PYTHONIOENCODING=utf-8)",
+      "Bash(dir:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

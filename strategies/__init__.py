@@ -12,11 +12,26 @@ from pydantic import BaseModel, Field
 # Pydantic models -----------------------------------------------------------
 
 class ToolStep(BaseModel):
-    """Single step in a tool chain."""
+    """Single step in a tool chain.
 
-    name: str
+    Supports legacy shape (name/params/loop) and extended shape (use/inputs/...)
+    for deterministic provider.method routing and optional LLM filling.
+    """
+
+    # Legacy fields
+    name: Optional[str] = None
     params: Dict[str, Any] = Field(default_factory=dict)
     loop: Optional[int] = None
+
+    # Extended fields
+    use: Optional[str] = None
+    description: Optional[str] = None
+    inputs: Dict[str, Any] = Field(default_factory=dict)
+    llm_fill: List[str] = Field(default_factory=list)
+    save_as: Optional[str] = None
+    foreach: Optional[str] = None
+    when: Optional[str] = None
+    phase: Optional[str] = None  # e.g., "research" (default) or "finalize"
 
 
 class StrategyMeta(BaseModel):
@@ -35,6 +50,7 @@ class Strategy(BaseModel):
     quorum: Dict[str, Any] = Field(default_factory=dict)
     render: Dict[str, Any] = Field(default_factory=dict)
     limits: Dict[str, Any] = Field(default_factory=dict)
+    finalize: Dict[str, Any] = Field(default_factory=dict)  # New field for reactive finalize
 
 
 # Loader --------------------------------------------------------------------

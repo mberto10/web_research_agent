@@ -18,12 +18,20 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name"],
         "properties": {
           "name": {"type": "string"},
           "params": {"type": "object"},
-          "loop": {"type": "integer"}
-        }
+          "loop": {"type": "integer"},
+          "use": {"type": "string"},
+          "description": {"type": "string"},
+          "inputs": {"type": "object"},
+          "llm_fill": {"type": "array", "items": {"type": "string"}},
+          "save_as": {"type": "string"},
+          "foreach": {"type": "string"},
+          "when": {"type": "string"},
+          "phase": {"type": "string"}
+        },
+        "additionalProperties": true
       }
     },
     "queries": {"type": "object"},
@@ -31,5 +39,6 @@
     "quorum": {"type": "object"},
     "render": {"type": "object"},
     "limits": {"type": "object"}
-  }
+  },
+  "additionalProperties": true
 }

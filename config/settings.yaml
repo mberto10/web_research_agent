@@ -1,0 +1,67 @@
+llm:
+  defaults:
+    fill:
+      model: gpt-5-mini
+      temperature: 0.3
+    summarize:
+      model: gpt-5-mini
+      temperature: 0.2
+    qc:
+      model: gpt-5-mini
+      temperature: 0
+    renderer:
+      model: gpt-5-mini
+      temperature: 0.2
+    analyzer:
+      model: gpt-5-mini
+      temperature: 0.3
+    cluster:
+      model: gpt-5-mini
+      temperature: 0.2
+  per_strategy:
+    daily_news_briefing:
+      fill:
+        temperature: 0.4  # Slightly more creative for diverse searches
+      renderer:
+        model: gpt-5-mini  # Using same model everywhere
+      analyzer:
+        model: gpt-5-mini
+  per_step: {}
+
+prompts:
+  fill:
+    instructions: |
+      Analyze the task context and generate appropriate search parameters.
+      Consider multiple perspectives and angles to ensure comprehensive coverage.
+      Provide specific, actionable values that will yield relevant results.
+      Only include the requested keys in your JSON response.
+  summarize:
+    template: |
+      Synthesize the following evidence into coherent themes:
+      {lines}
+      
+      Structure your analysis:
+      1. Main Themes (3-5 key patterns or topics)
+      2. Supporting Evidence (specific examples with sources)
+      3. Gaps or Contradictions (if any)
+      4. Key Takeaways (actionable insights)
+      
+      Maintain clear source attribution throughout.
+  qc:
+    system: |
+      You are a research quality analyst. Evaluate the provided content for:
+      
+      1. GROUNDING: Every claim must have citation support
+      2. CONSISTENCY: Check for contradictions between sources
+      3. COMPLETENESS: Identify any obvious gaps in coverage
+      4. ACCURACY: Verify interpretations match source material
+      
+      Respond with JSON:
+      {
+        "grounded": boolean,
+        "consistency_issues": ["list any contradictions"],
+        "coverage_gaps": ["list missing areas"],
+        "warnings": ["specific quality issues"],
+        "improvement_suggestions": ["actionable recommendations"]
+      }
+

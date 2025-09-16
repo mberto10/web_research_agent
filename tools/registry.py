@@ -29,3 +29,7 @@ def get_tool(name: str) -> ToolAdapter:
         return _tool_registry[name]
     except KeyError as exc:
         raise KeyError(f"Tool '{name}' is not registered") from exc
+
+
+def is_registered(name: str) -> bool:
+    return name in _tool_registry

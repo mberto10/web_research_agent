@@ -1,0 +1,149 @@
+# Complete example showing ALL available Exa API parameters
+# This is a reference implementation for developers
+
+meta:
+  slug: example_exa_full
+  version: 1
+  category: example
+  time_window: custom
+  depth: comprehensive
+
+queries:
+  exa_search: "{{topic}} {{custom_modifier}}"
+  exa_answer: "What are the key insights about {{topic}}?"
+
+tool_chain:
+  # SEARCH ENDPOINT - All parameters demonstrated
+  - name: exa_search_complete
+    params:
+      # Search type configuration
+      type: "auto"  # Options: "keyword", "neural", "fast", "auto"
+                    # auto: Intelligently combines neural and keyword
+                    # neural: Embeddings-based semantic search
+                    # keyword: Traditional keyword matching
+                    # fast: Optimized for speed
+      
+      # Content filtering
+      category: "news"  # Options: "company", "research paper", "news", 
+                       # "pdf", "github", "tweet", "personal site",
+                       # "linkedin profile", "financial report"
+      
+      # Result configuration
+      num_results: 25  # 1-100, default: 10
+      use_autoprompt: true  # Auto-optimize query for neural search
+      
+      # Date filters (ISO 8601 format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
+      start_crawl_date: "2024-01-01"  # Links crawled after this date
+      end_crawl_date: "2024-12-31"    # Links crawled before this date
+      start_published_date: "{{start_date}}"  # Published after
+      end_published_date: "{{end_date}}"      # Published before
+      
+      # Domain filters
+      include_domains:  # List of domains to search (can be subdomains)
+        - "example.com"
+        - "news.example.org"
+        - "blog.company.com"
+      exclude_domains:  # Domains to exclude from results
+        - "spam.com"
+        - "unreliable.net"
+      
+      # Text content filters
+      include_text: "important keyword"  # Must contain (1 string, max 5 words)
+      exclude_text: "unwanted term"      # Must not contain (1 string, max 5 words)
+      
+      # Location and safety
+      user_location: "US"  # Two-letter ISO country code for result bias
+      moderation: true     # Filter unsafe content (default: false)
+      
+      # LLM optimization
+      context: true  # Format results for LLM consumption
+                    # Can also be an object with specific options
+  
+  # CONTENTS ENDPOINT - All parameters demonstrated
+  - name: exa_contents_complete
+    params:
+      # Text retrieval options
+      text:  # Can be boolean or object
+        include_html_tags: false  # Include/exclude HTML tags
+        max_characters: 10000     # Limit text length
+      
+      # Highlight extraction
+      highlights:  # Get most relevant snippets
+        query: "specific search terms for highlights"
+        num_sentences: 3  # Number of sentences to extract
+        highlights_per_url: 5  # Highlights per URL
+      
+      # Summary generation
+      summary:
+        length: "medium"  # Options: "short", "medium", "long"
+      
+      # Crawling configuration
+      livecrawl: "fallback"  # Options:
+                             # "never": Only use cache
+                             # "fallback": Use cache, crawl if empty (default for keyword)
+                             # "always": Always crawl fresh
+                             # "preferred": Try crawl first, fallback to cache
+      livecrawl_timeout: 12000  # Timeout in milliseconds (default: 10000)
+      
+      # Subpage crawling
+      subpages: 3  # Number of subpages to crawl (default: 0)
+      subpage_target: "documentation"  # Keywords to find specific subpages
+                                       # Can be string or array of strings
+      
+      # Additional options
+      extras:  # Additional parameters to pass
+        custom_param: "value"
+      
+      # LLM formatting
+      context: true  # Format as context string for LLMs
+  
+  # FIND SIMILAR ENDPOINT - All parameters demonstrated
+  - name: exa_similar_complete
+    params:
+      # Basic configuration
+      num_results: 15  # 1-100, default: 10
+      
+      # Domain control
+      include_domains:
+        - "similar-site.com"
+        - "related-domain.org"
+      exclude_domains:
+        - "avoid-this.com"
+      exclude_source_domain: true  # Exclude the source URL's domain
+      
+      # Date filters
+      start_crawl_date: "2024-01-01"
+      end_crawl_date: "2024-12-31"
+      start_published_date: "{{start_date}}"
+      end_published_date: "{{end_date}}"
+      
+      # Content filters
+      include_text: "must have"  # Required text (1 string, max 5 words)
+      exclude_text: "must not"   # Excluded text (1 string, max 5 words)
+      
+      # Category and safety
+      category: "research paper"  # Filter by content type
+      moderation: false          # Filter unsafe content
+      
+      # LLM formatting
+      context: true  # Format for LLM consumption
+  
+  # ANSWER ENDPOINT - All parameters demonstrated
+  - name: exa_answer_complete
+    params:
+      # Response options
+      stream: false  # Stream response as server-sent events (default: false)
+      text: true    # Include full text content in results (default: false)
+  
+  # Minimal configuration example (uses all defaults)
+  - name: exa_search_minimal
+    params:
+      num_results: 5  # Only specify what's different from defaults
+
+limits:
+  max_results: 100
+  max_llm_queries: 5
+
+render:
+  type: markdown
+  sections: []

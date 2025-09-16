@@ -1,0 +1,77 @@
+meta:
+  slug: financial_news_reactive
+  version: 1
+  category: financial
+  time_window: day
+  depth: comprehensive
+
+queries:
+  sonar: "{{topic}} stock price earnings financial news today"
+  exa_search: "{{topic}} financial results market analysis"
+
+tool_chain:
+  # Initial research phase
+  - name: sonar_financial
+    params:
+      system_prompt: "Focus on financial data, stock movements, earnings, and market analysis"
+      search_mode: "web"
+      search_recency_filter: "day"
+      search_domain_filter:
+        - "bloomberg.com"
+        - "reuters.com"
+        - "wsj.com"
+        - "cnbc.com"
+        - "marketwatch.com"
+        - "yahoo.com"
+        - "seekingalpha.com"
+      temperature: 0.1
+      max_tokens: 2000
+  
+  - name: exa_market_search
+    params:
+      type: "neural"
+      category: "news"
+      num_results: 15
+      use_autoprompt: true
+      start_published_date: "{{start_date}}"
+      end_published_date: "{{end_date}}"
+      include_domains:
+        - "bloomberg.com"
+        - "ft.com"
+        - "businessinsider.com"
+      include_text: "market"
+
+finalize:
+  reactive: true
+  instructions: |
+    You are writing a financial news briefing about {{topic}}.
+    
+    Review the evidence for completeness and accuracy.
+    
+    Critical checks:
+    - If stock price data conflicts or is missing today's closing price:
+      Use exa_answer("{{topic}} stock price close today exact NYSE NASDAQ")
+    
+    - If earnings data is mentioned but not detailed:
+      Use sonar_call("{{topic}} earnings per share revenue Q4 2024 exact numbers", search_mode="web", temperature=0)
+    
+    - If major news is referenced but lacks specifics:
+      Use exa_search("{{topic}} announcement official statement today", num_results=3, search_recency_filter="day")
+    
+    Make at most ONE tool call for the most critical missing information.
+    
+    Then write these sections:
+    - Market Summary (stock price, movement, volume)
+    - Key Financial News (major developments)
+    - Earnings & Financials (if available)
+    - Analyst Views (ratings, targets, opinions)
+    - Market Impact & Outlook
+    - Data Sources
+
+limits:
+  max_results: 40
+  max_llm_queries: 2
+
+render:
+  type: markdown
+  sections: []

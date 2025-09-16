@@ -1,0 +1,80 @@
+meta:
+  slug: research_paper_analysis
+  version: 1
+  category: academic
+  time_window: month
+  depth: deep
+
+queries:
+  exa_search: "{{topic}} research papers academic publications"
+  exa_answer: "What are the latest research findings about {{topic}}?"
+
+tool_chain:
+  # Step 1: Neural search for academic papers with category filter
+  - name: exa_academic_search
+    params:
+      num_results: 20
+      type: "neural"  # Use embeddings-based search for semantic understanding
+      category: "research paper"  # Filter to only research papers
+      use_autoprompt: true  # Auto-optimize the query
+      # Date filtering for recent papers
+      start_published_date: "{{start_date}}"
+      end_published_date: "{{end_date}}"
+      # Domain restrictions to academic sources
+      include_domains:
+        - "arxiv.org"
+        - "nature.com"
+        - "science.org"
+        - "ieee.org"
+        - "acm.org"
+        - "pubmed.ncbi.nlm.nih.gov"
+        - "sciencedirect.com"
+        - "springer.com"
+        - "plos.org"
+        - "frontiersin.org"
+      # Exclude preprint servers if only peer-reviewed wanted
+      # exclude_domains:
+      #   - "biorxiv.org"
+      #   - "medrxiv.org"
+      moderation: false  # Academic content rarely needs moderation
+      context: true  # Format for LLM consumption
+  
+  # Step 2: Find similar papers based on a key result
+  - name: exa_find_similar_papers
+    params:
+      # This would use URL from previous step - simplified for example
+      num_results: 10
+      exclude_source_domain: true  # Don't include papers from same domain
+      category: "research paper"
+      # Include papers with specific methodology keywords
+      include_text: "methodology"  # Max 5 words
+      start_published_date: "{{start_date}}"
+  
+  # Step 3: Get detailed contents of top papers
+  - name: exa_get_paper_contents
+    params:
+      # URLs would come from previous searches
+      text:
+        include_html_tags: false  # Clean text only
+        max_characters: 5000  # Limit to abstract and introduction
+      highlights:  # Get most relevant snippets
+        query: "{{topic}} findings results conclusions"
+        num_sentences: 5
+      summary:
+        length: "short"  # Brief summary
+      livecrawl: "fallback"  # Use cache first, crawl if needed
+      livecrawl_timeout: 15000  # 15 second timeout for academic sites
+  
+  # Step 4: Get direct answer synthesizing the research
+  - name: exa_synthesize_answer
+    params:
+      text: true  # Include full text in response
+      stream: false  # Get complete answer at once
+
+limits:
+  max_results: 50
+  max_llm_queries: 3
+
+render:
+  type: markdown
+  sections: []

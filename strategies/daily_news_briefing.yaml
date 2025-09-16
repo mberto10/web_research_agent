@@ -1,0 +1,151 @@
+meta:
+  slug: daily_news_briefing
+  version: 3
+  category: news
+  time_window: day
+  depth: deep
+
+queries:
+  sonar: "{{topic}} latest news updates developments today"
+  exa_search: "{{topic}} recent developments news today"
+  exa_answer: "What are the most important recent events and developments regarding {{topic}} today?"
+
+tool_chain:
+  # Step 1: Broad overview with Sonar (with enhanced parameters)
+  - name: sonar_overview
+    params:
+      max_results: 10
+      # New Sonar-specific parameters:
+      system_prompt: "Be precise and focus on recent, factual news developments. Include dates and specific details."
+      search_mode: "web"  # Options: "web" (default) or "academic"
+      search_recency_filter: "{{search_recency_filter}}"  # Now dynamic based on time_window
+      return_images: false  # Don't include images in results
+      return_related_questions: false  # Don't return related questions
+      temperature: 0.1  # Lower temperature for more factual responses
+      max_tokens: 1500  # Limit response length
+  
+  # Step 2: Semantic search with Exa (with date filtering)
+  - name: exa_search_semantic
+    params:
+      num_results: 10
+      use_autoprompt: true
+      type: neural
+      start_published_date: "{{start_date}}"
+      end_published_date: "{{end_date}}"
+  
+  # Step 3: Get direct answer from Exa
+  - name: exa_answer_summary
+    params:
+      max_length: 500
+  
+  # Step 4: Synthesize findings (simplified, no schema enforcement)
+  - use: llm_analyzer.call
+    description: "Create comprehensive briefing"
+    inputs:
+      prompt: |
+        Create a comprehensive daily news briefing from the following research results.
+        
+        Topic: {{topic}}
+        Current Date: {{current_date if current_date else 'Today'}}
+        Timeframe: {{start_date_natural}} to {{end_date_natural}}
+        
+        Research Evidence ({{evidence_count}} items total, showing top 30):
+        {{evidence_text}}
+        
+        Please create a well-structured briefing with the following sections:
+        
+        1. EXECUTIVE SUMMARY
+        Write a 2-3 sentence overview of the most important developments including the most important URLs.
+        
+        2. KEY DEVELOPMENTS
+        List 3-5 major news items, each formatted as:
+        • Headline: specific development (2-3 sentences with key facts, numbers, dates, people involved)
+          Source: (Date) [URL]
+        
+        3. DETAILED ANALYSIS BY THEME
+        Create 2-4 thematic sections based on what's most relevant to "{{topic}}".
+        Choose themes that reflect the actual news (e.g., "New Drug Approvals", "Supply Chain Disruptions", "Price Changes", "Clinical Trial Results", "Company Acquisitions", "Regulatory Decisions", etc.)
+        
+        For each theme:
+        - Theme title
+        - Brief overview (1 sentence)
+        - Bullet points with specific, newsworthy information:
+          • Concrete fact or development (Date) [Source URL]
+          • Another specific update (Date) [Source URL]
+        
+        DO NOT include:
+        - Generic descriptions of websites or resources
+        - Explanations of what organizations do
+        - Background context that isn't news
+        ONLY include:
+        - Actual events, announcements, changes
+        - Specific data, numbers, names
+        - Recent developments and their direct impacts
+        
+        4. NOTABLE MENTIONS
+        Brief bullet points of other relevant but less critical updates
+        Each with format: "• Specific news item (Date) [Source URL]"
+        
+        5. ALL SOURCES
+        Complete list of all sources used, formatted as:
+        - Publication/Website (Date): URL
+        Include the date for each source if available
+        
+        Write in clear, professional language suitable for a business briefing.
+        Focus on facts and concrete information from the sources.
+        Include source URLs directly after each piece of information.
+        
+        IMPORTANT: 
+        - Only output the 5 sections listed above - nothing else
+        - Do NOT add any conversational text like "If you'd like..." or "I can help with..."
+        - Do NOT offer additional services or ask questions
+        - End the briefing after section 5 (ALL SOURCES)
+        - Focus on NEWS - what happened, was announced, changed, or was discovered
+        - Exclude generic resource descriptions or website overviews
+        - Every point must be a concrete, newsworthy item
+        - Themes must be specific to the search topic, not generic categories
+        - AVOID DUPLICATION: Each news item should appear only ONCE in the briefing (choose the most relevant section)
+        - If evidence lacks dates, mark as "(Date not available)" not "(n.d.)"
+    save_as: briefing_content
+    phase: finalize
+
+limits:
+  max_results: 50
+  max_llm_queries: 2
+
+finalize:
+  reactive: true
+  instructions: |
+    You are writing a daily news briefing about {{topic}}.
+    
+    First, review the evidence collected to see if you have recent, comprehensive coverage.
+    
+    If you find that:
+    - All evidence is older than 6 hours and this is breaking news: 
+      Use exa_search("{{topic}} latest breaking today", num_results=5, search_recency_filter="day")
+    
+    - There are conflicting reports about key facts or numbers:
+      Use exa_answer("{{topic}} verified facts timeline of events today")
+    
+    - You have general information but lack today's specific updates:
+      Use sonar_call("{{topic}} what happened today latest updates", search_recency_filter="day")
+    
+    Only make ONE tool call if absolutely necessary for report completeness.
+    
+    Then write these sections:
+    - Breaking News (most recent developments)
+    - Key Developments (3-5 major items with details)
+    - Analysis by Theme (2-3 thematic sections based on the news)
+    - Market Impact (if relevant)
+    - Notable Mentions (other relevant updates)
+    - Sources (complete numbered list with dates and full URLs)
+    
+    IMPORTANT:
+    - Use [1], [2], etc. to reference sources in the text
+    - List all sources at the end with numbers, dates, and complete URLs
+    - Do NOT add any text like "If you want I can produce..." or offer additional services
+    - End the report immediately after the Sources section
+
+render:
+  type: markdown  # Options: markdown (raw), newsletter (HTML email), pdf (PDF-ready)
+  sections: []

@@ -1,0 +1,66 @@
+meta:
+  slug: financial_research
+  version: 1
+  category: finance
+  time_window: week
+  depth: deep
+
+queries:
+  sonar: "{{topic}} financial markets analysis stocks bonds earnings reports"
+  exa_search: "{{topic}} stock market financial analysis"
+
+tool_chain:
+  # Step 1: Financial-focused Sonar search with domain restrictions
+  - name: sonar_financial
+    params:
+      max_results: 15
+      # Advanced Sonar parameters:
+      system_prompt: |
+        You are a financial analyst. Focus on quantitative data, market movements, 
+        earnings reports, and regulatory filings. Include specific percentages, 
+        dollar amounts, and dates.
+      search_mode: "web"
+      # Limit to trusted financial sources (max 20 domains)
+      search_domain_filter: 
+        - "bloomberg.com"
+        - "reuters.com"
+        - "wsj.com"
+        - "ft.com"
+        - "cnbc.com"
+        - "marketwatch.com"
+        - "sec.gov"
+        - "yahoo.com"
+        - "seekingalpha.com"
+        - "barrons.com"
+      search_recency_filter: "week"  # Last 7 days
+      return_images: false
+      return_related_questions: true  # Useful for financial research
+      temperature: 0.1  # Very low for factual accuracy
+      max_tokens: 2000
+  
+  # Step 2: Academic/research papers search
+  - name: sonar_academic
+    params:
+      max_results: 5
+      system_prompt: "Find academic research and analysis papers related to the financial topic."
+      search_mode: "academic"  # Academic sources
+      search_recency_filter: "month"
+      temperature: 0.2
+      max_tokens: 1000
+  
+  # Step 3: Semantic search with Exa
+  - name: exa_search_semantic
+    params:
+      num_results: 10
+      use_autoprompt: true
+      type: neural
+      start_date: "{{start_date}}"
+      end_date: "{{end_date}}"
+
+limits:
+  max_results: 50
+  max_llm_queries: 3
+
+render:
+  type: markdown
+  sections: []
