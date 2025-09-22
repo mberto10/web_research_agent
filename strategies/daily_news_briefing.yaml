@@ -33,10 +33,10 @@ tool_chain:
       start_published_date: "{{start_date}}"
       end_published_date: "{{end_date}}"
   
-  # Step 3: Get direct answer from Exa
+  # Step 3: Get direct answer from Exa (using custom HTTP implementation)
   - name: exa_answer_summary
     params:
-      max_length: 500
+      text: true  # Include source text in response
   
   # Step 4: Synthesize findings (simplified, no schema enforcement)
   - use: llm_analyzer.call
@@ -46,11 +46,11 @@ tool_chain:
         Create a comprehensive daily news briefing from the following research results.
         
         Topic: {{topic}}
-        Current Date: {{current_date if current_date else 'Today'}}
+        Current Date: {{current_date}}
         Timeframe: {{start_date_natural}} to {{end_date_natural}}
         
-        Research Evidence ({{evidence_count}} items total, showing top 30):
-        {{evidence_text}}
+        Research Evidence ({{evidence_count}} items total, showing top 50):
+        {{evidence_full_text}}
         
         Please create a well-structured briefing with the following sections:
         
@@ -110,7 +110,7 @@ tool_chain:
     phase: finalize
 
 limits:
-  max_results: 50
+  max_results: 100
   max_llm_queries: 2
 
 finalize:

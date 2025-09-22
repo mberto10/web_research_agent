@@ -22,6 +22,7 @@ from .config import (
 )
 from .langfuse_tracing import get_langfuse_client, observe
 from .debug_log import dbg
+from .enhanced_debug import enhanced_logger as elog
 from tools import get_tool, register_default_adapters
 from .scope import categorize_request, split_tasks
 from strategies import load_strategy, select_strategy, get_index_entry_by_slug
@@ -151,6 +152,7 @@ def _as_evidence_list(results: Any) -> List[Evidence]:
 def _cluster_llm(prompt: str, model: str | None = None) -> str:
     """Call an LLM to cluster evidence and return the raw text response."""
     from openai import OpenAI  # Lazy import to keep optional dependency
+    import time
     
     # Get model from config if not provided
     if model is None:
@@ -166,13 +168,27 @@ def _cluster_llm(prompt: str, model: str | None = None) -> str:
             input={"prompt": prompt},
             metadata={"component": "cluster_llm"},
         )
+    
+    start_time = time.time()
+    messages = [{"role": "user", "content": prompt}]
     response = client.chat.completions.create(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
     )
     choice = response["choices"][0] if isinstance(response, dict) else response.choices[0]
     message = choice["message"] if isinstance(choice, dict) else choice.message
     content = message.get("content") if isinstance(message, dict) else message.content
+    duration = time.time() - start_time
+    
+    # Log to enhanced debug
+    elog.llm_call(
+        component="cluster_llm",
+        model=model,
+        messages=messages,
+        response=content,
+        duration=duration
+    )
+    
     if lf_client:
         usage = getattr(response, "usage", None)
         usage_details = None
@@ -203,6 +219,7 @@ def _canonical_url(url: str) -> str:
 
 def _dedupe_and_score(evidence: List[Evidence], limit: int | None) -> List[Evidence]:
     """Dedupe by canonical URL and apply simple scoring and budget."""
+    import math
     deduped: Dict[str, Evidence] = {}
     for ev in evidence:
         key = _canonical_url(ev.url)
@@ -219,7 +236,8 @@ def _dedupe_and_score(evidence: List[Evidence], limit: int | None) -> List[Evide
             try:
                 dt = datetime.fromisoformat(ev.date.split("T")[0]).date()
                 days = max((today - dt).days, 0)
-                recency = 1 / (1 + days)
+                # Use logarithmic decay for better handling of weekly/monthly content
+                recency = 1 / (1 + math.log(1 + days / 7))
             except Exception:
                 recency = 1.0
         base = ev.score or 0.0
@@ -343,6 +361,7 @@ def _refine_queries_with_llm(
 
 def scope(state: State) -> State:
     """Scope phase categorizes the request and selects a strategy."""
+    elog.node_start("scope", state.__dict__ if hasattr(state, '__dict__') else {})
     dbg.event(
         "scope.start",
         user_request=state.user_request,
@@ -399,6 +418,7 @@ def scope(state: State) -> State:
         tasks=state.tasks,
         variables=state.vars,
     )
+    elog.node_end("scope", state.__dict__ if hasattr(state, '__dict__') else {})
     return state
 
 
@@ -409,7 +429,9 @@ def research(state: State) -> State:
     strategy's steps. We no longer fan-out across multiple tasks; instead we derive
     a canonical topic and run the chain once.
     """
+    elog.node_start("research", state.__dict__ if hasattr(state, '__dict__') else {})
     if not state.strategy_slug:
+        elog.node_end("research", state.__dict__ if hasattr(state, '__dict__') else {})
         return state
 
     register_default_adapters(silent=True)
@@ -529,6 +551,8 @@ def research(state: State) -> State:
                         for ev in last_results[:top_k]:
                             call_params = {k: v for k, v in step.get("params", {}).items() if k != "top_k"}
                             dbg.tool_call("exa", "contents", {"url": ev.url, **call_params})
+                            # Preserve original score before enhancement
+                            original_score = ev.score
                             content = tool.contents(ev.url, **call_params)
                             # Normalize various return shapes (list[Evidence] | Evidence)
                             snippet_val = None
@@ -539,6 +563,9 @@ def research(state: State) -> State:
                                 snippet_val = content.snippet
                             if snippet_val:
                                 ev.snippet = snippet_val
+                            # Restore original search relevance score
+                            if original_score is not None:
+                                ev.score = original_score
                             fetched.append(ev)
                         results = fetched
                     elif name.startswith("exa_find_similar"):
@@ -678,6 +705,9 @@ def research(state: State) -> State:
     # Aggregate across topics (if any), then dedupe and apply budget once
     state.evidence.extend(aggregated_evidence)
     state.evidence = _dedupe_and_score(state.evidence, max_results)
+    elog.evidence_update("research_complete", len(aggregated_evidence), len(state.evidence), 
+                        [ev.url for ev in state.evidence[:10]])
+    elog.node_end("research", state.__dict__ if hasattr(state, '__dict__') else {})
     return state
 
 
@@ -988,26 +1018,36 @@ def finalize(state: State) -> State:
 
     # Format evidence as text for LLM consumption
     evidence_text = []
-    for i, ev in enumerate(state.evidence[:30], 1):
+    evidence_full_text = []  # Full snippets for LLM analysis
+    for i, ev in enumerate(state.evidence[:50], 1):
         text = f"{i}. "
+        full_text = f"{i}. "
         if ev.title:
             text += f"{ev.title} "
+            full_text += f"{ev.title} "
         if ev.snippet:
-            text += f"- {ev.snippet[:200]} "
+            text += f"- {ev.snippet[:500]} "
+            # For full text, include the entire snippet
+            full_text += f"- {ev.snippet} "
         # Add date before URL for better formatting
         if ev.date:
             text += f"({ev.date}) "
+            full_text += f"({ev.date}) "
         elif ev.publisher:
             text += f"({ev.publisher}) "
+            full_text += f"({ev.publisher}) "
         if ev.url:
             text += f"[{ev.url}]"
+            full_text += f"[{ev.url}]"
         evidence_text.append(text)
+        evidence_full_text.append(full_text)
     
     variables: Dict[str, Any] = {
         "topic": state.tasks[0] if state.tasks else "",
         "time_window": state.time_window or "",
         "evidence": state.evidence,  # Keep original for compatibility
-        "evidence_text": "\n".join(evidence_text),  # Formatted text for LLM
+        "evidence_text": "\n".join(evidence_text),  # Formatted text for display
+        "evidence_full_text": "\n".join(evidence_full_text),  # Full text for LLM analysis
         "evidence_count": len(state.evidence),
         "current_date": state.vars.get("current_date", ""),
         "start_date": state.vars.get("start_date", ""),
@@ -1058,7 +1098,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
     
     def format_evidence_lines(
         items: List[Evidence],
-        limit: int = 30,
+        limit: int = 50,
         skip_urls: Optional[set[str]] = None,
     ) -> List[str]:
         lines: List[str] = []
@@ -1067,7 +1107,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
             if ev.title:
                 text += f"{ev.title} "
             if ev.snippet:
-                text += f"- {ev.snippet[:200]}... "
+                text += f"- {ev.snippet[:500]}... "
             if ev.date:
                 text += f"({ev.date}) "
             elif ev.publisher:
@@ -1377,6 +1417,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
 
 def _execute_use(use: str, inputs: Dict[str, Any]) -> Any:
     """Execute a routed adapter method use=provider.method with inputs."""
+    import time
     try:
         provider, method = use.split(".", 1)
     except ValueError:
@@ -1404,10 +1445,22 @@ def _execute_use(use: str, inputs: Dict[str, Any]) -> Any:
             dbg.tool_call(provider, method, inputs if isinstance(inputs, dict) else {"arg": inputs})
         except Exception:
             pass
+        
+        start_time = time.time()
         result = fn(**inputs) if isinstance(inputs, dict) else fn(inputs)
+        duration = time.time() - start_time
+        
         try:
             evs = _as_evidence_list(result)
             dbg.tool_result(provider, method, count=len(evs), sample=[ev.url for ev in evs[:5]] if evs else None)
+            # Enhanced logging
+            elog.tool_call(
+                provider=provider,
+                method=method,
+                inputs=inputs if isinstance(inputs, dict) else {"arg": inputs},
+                output=evs[:5] if evs else result,
+                duration=duration
+            )
         except Exception:
             pass
         return result
@@ -1479,6 +1532,7 @@ def _llm_fill_inputs_simple(description: str, allowed: Dict[str, Any], model: st
     except Exception:
         return {}
     import os
+    import time
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return {}
@@ -1502,9 +1556,11 @@ def _llm_fill_inputs_simple(description: str, allowed: Dict[str, Any], model: st
             metadata={"component": "fill_llm"},
         )
     try:
+        start_time = time.time()
+        messages = [{"role": "user", "content": instructions}]
         resp = client.chat.completions.create(
             model=model or "gpt-4o-mini",
-            messages=[{"role": "user", "content": instructions}],
+            messages=messages,
         )
         choice = resp["choices"][0] if isinstance(resp, dict) else resp.choices[0]
         message = choice["message"] if isinstance(choice, dict) else choice.message

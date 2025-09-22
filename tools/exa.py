@@ -85,7 +85,6 @@ class ExaAdapter:
         lf_client = get_langfuse_client()
         if lf_client:
             lf_client.update_current_span(
-                name="exa-search",
                 input={"query": query, "params": api_params},
                 metadata={"adapter": "exa", "method": "search"},
             )
@@ -166,7 +165,6 @@ class ExaAdapter:
         lf_client = get_langfuse_client()
         if lf_client:
             lf_client.update_current_span(
-                name="exa-contents",
                 input={"urls": urls, "params": api_params},
                 metadata={"adapter": "exa", "method": "contents"},
             )
@@ -272,7 +270,6 @@ class ExaAdapter:
         lf_client = get_langfuse_client()
         if lf_client:
             lf_client.update_current_span(
-                name="exa-find-similar",
                 input={"url": url, "params": api_params},
                 metadata={"adapter": "exa", "method": "find_similar"},
             )
@@ -321,16 +318,18 @@ class ExaAdapter:
 
     @observe(as_type="span", name="exa-answer")
     def answer(self, query: str, **params: Any) -> str:
-        """Get direct answers to questions.
+        """Get direct answers to questions using the Exa Answer API.
+        
+        Since exa-py SDK doesn't have the answer method yet, we use the raw API.
         
         Supports Exa answer parameters:
         - stream: Return as server-sent events stream (default: false)
         - text: Include full text content in results (default: false)
         """
-        client = self._client()
+        import requests
         
         # Process parameters
-        api_params = {}
+        api_params = {"query": query}
         for param in ["stream", "text"]:
             if param in params:
                 api_params[param] = params[param]
@@ -342,20 +341,43 @@ class ExaAdapter:
         
         lf_client = get_langfuse_client()
         if lf_client:
+            # Note: update_current_span doesn't take 'name' parameter
             lf_client.update_current_span(
-                name="exa-answer",
                 input={"query": query, "params": api_params},
                 metadata={"adapter": "exa", "method": "answer"},
             )
-
-        response = client.answer(query, **api_params)
-        answer_text = response.get("answer") if isinstance(response, dict) else getattr(response, "answer", "")
-        if lf_client:
-            lf_client.update_current_span(
-                output={"answer": answer_text},
-                metadata={"status": "success"},
-            )
-        return answer_text
+        
+        # Make direct API call since SDK doesn't have answer method yet
+        url = "https://api.exa.ai/answer"
+        headers = {
+            "x-api-key": self.api_key,
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            response = requests.post(url, json=api_params, headers=headers, timeout=30)
+            response.raise_for_status()
+            result = response.json()
+            
+            answer_text = result.get("answer", "")
+            
+            if lf_client:
+                lf_client.update_current_span(
+                    output={"answer": answer_text[:500]},  # Truncate for logging
+                    metadata={"status": "success", "has_citations": "citations" in result},
+                )
+            
+            return answer_text
+            
+        except requests.exceptions.RequestException as e:
+            if lf_client:
+                lf_client.update_current_span(
+                    output={"error": str(e)},
+                    metadata={"status": "error"},
+                )
+            # Return empty string on error to maintain compatibility
+            print(f"Exa answer API error: {e}")
+            return ""
 
     def call(self, *args: Any, **kwargs: Any) -> List[Evidence]:
         """Default call proxies to ``search`` for registry uniformity."""

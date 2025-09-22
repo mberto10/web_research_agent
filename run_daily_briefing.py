@@ -22,6 +22,7 @@ from core.state import State
 from tools import register_default_adapters
 from core.langfuse_tracing import workflow_span, flush_traces
 from core.debug_log import dbg
+from core.enhanced_debug import init_debug_session
 
 
 def setup_environment():
@@ -36,6 +37,12 @@ def setup_environment():
 
 def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hours", verbose: bool = False, debug: bool = False, debug_file: str | None = None):
     """Run the daily news briefing workflow."""
+    
+    # Initialize enhanced debug session if debug mode is enabled
+    if debug or os.getenv('DEBUG_LOG') or os.getenv('WEB_RESEARCH_DEBUG'):
+        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        enhanced_logger = init_debug_session(session_id)
+        print(f"[DEBUG] Enhanced logging enabled. Session: {session_id}")
     
     print("=" * 60)
     print("DAILY NEWS BRIEFING")

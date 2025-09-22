@@ -36,7 +36,33 @@ class SonarAdapter:
             timeout=timeout,
             max_retries=2
         )
-        return client.chat.completions.create(model=self.model, messages=messages, **params)
+        
+        # Separate OpenAI-compatible params from Perplexity-specific ones
+        openai_params = {}
+        perplexity_params = {}
+        
+        for key, value in params.items():
+            # These are Perplexity-specific parameters that need to go in extra_body
+            if key in ['search_mode', 'search_domain_filter', 'search_recency_filter',
+                      'return_images', 'return_related_questions', 'reasoning_effort',
+                      'disable_search', 'enable_search_classifier']:
+                perplexity_params[key] = value
+            # Standard OpenAI parameters
+            elif key in ['temperature', 'top_p', 'max_tokens', 'stream']:
+                openai_params[key] = value
+            else:
+                # Unknown params go to Perplexity by default
+                perplexity_params[key] = value
+        
+        # Add Perplexity params via extra_body if any exist
+        if perplexity_params:
+            openai_params['extra_body'] = perplexity_params
+            
+        return client.chat.completions.create(
+            model=self.model, 
+            messages=messages, 
+            **openai_params
+        )
 
     @observe(as_type="generation", name="sonar-call")
     def call(self, prompt: str, **params: Any) -> List[Evidence]:
@@ -96,6 +122,16 @@ class SonarAdapter:
         elif isinstance(response, dict) and 'search_results' in response:
             search_results = response['search_results']
         
+        # Also extract the message content for potential snippet use
+        message_content = None
+        try:
+            if hasattr(response, 'choices') and response.choices:
+                message_content = response.choices[0].message.content
+            elif isinstance(response, dict) and 'choices' in response:
+                message_content = response['choices'][0]['message']['content']
+        except (AttributeError, KeyError, IndexError, TypeError):
+            pass
+        
         if search_results:
             # Use search_results which has richer metadata
             for result in search_results:
@@ -114,28 +150,34 @@ class SonarAdapter:
             # Fallback to citations (deprecated but still returned)
             citations = response.get("citations", []) if isinstance(response, dict) else getattr(response, "citations", [])
             
-            for c in citations:
+            # If we have message content but no snippets, use a portion of the message
+            snippet_fallback = None
+            if message_content and citations:
+                # Take first 500 chars of the response as a general snippet
+                snippet_fallback = message_content[:500] if len(message_content) > 500 else message_content
+            
+            for i, c in enumerate(citations):
                 # Citations from Sonar are just URL strings
                 if isinstance(c, str):
                     evidence.append(
                         Evidence(
                             url=c,
-                            title=None,  # Sonar doesn't provide titles in citations
-                            publisher=None,  # Sonar doesn't provide publishers
-                            date=None,  # Sonar doesn't provide dates
-                            snippet=None,  # Sonar doesn't provide snippets in citations
+                            title=f"Source {i+1}",  # Add generic title
+                            publisher=None,
+                            date=None,
+                            snippet=snippet_fallback if i == 0 else None,  # Add snippet to first citation
                             tool=self.name,
                         )
                     )
                 elif isinstance(c, dict):
-                    # Fallback for potential future API changes
+                    # Handle dict-based citations with more metadata
                     evidence.append(
                         Evidence(
                             url=c.get("url", "") if isinstance(c, dict) else "",
-                            title=c.get("title") if isinstance(c, dict) else None,
+                            title=c.get("title") if isinstance(c, dict) else f"Source {i+1}",
                             publisher=c.get("publisher") if isinstance(c, dict) else None,
-                            date=c.get("publishedAt") if isinstance(c, dict) else None,
-                            snippet=c.get("snippet") if isinstance(c, dict) else None,
+                            date=c.get("publishedAt") or c.get("date") if isinstance(c, dict) else None,
+                            snippet=c.get("snippet") or c.get("text") or (snippet_fallback if i == 0 else None) if isinstance(c, dict) else None,
                             tool=self.name,
                         )
                     )

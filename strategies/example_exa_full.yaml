@@ -129,6 +129,7 @@ tool_chain:
       context: true  # Format for LLM consumption
   
   # ANSWER ENDPOINT - All parameters demonstrated
+  # Note: Using custom HTTP implementation since exa-py SDK 1.0.6 doesn't include this method
   - name: exa_answer_complete
     params:
       # Response options

@@ -16,10 +16,14 @@ import os
 try:  # Langfuse SDK is optional at runtime.
     from langfuse import get_client as _get_client
     from langfuse import observe as _observe
-    from langfuse.langchain import CallbackHandler
 except Exception:  # pragma: no cover - exercised when Langfuse not installed.
     _get_client = None  # type: ignore
     _observe = None  # type: ignore
+
+# LangChain integration is optional even if Langfuse is installed
+try:
+    from langfuse.langchain import CallbackHandler
+except Exception:  # LangChain may not be installed
     CallbackHandler = None  # type: ignore
 
 

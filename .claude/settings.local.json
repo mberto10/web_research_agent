@@ -14,7 +14,9 @@
       "WebFetch(domain:platform.openai.com)",
       "Bash(set PYTHONIOENCODING=utf-8)",
       "Bash(dir:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(set DEBUG_LOG=true)",
+      "Bash(pip show:*)"
     ],
     "deny": [],
     "ask": []
