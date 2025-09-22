@@ -13,7 +13,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:platform.openai.com)",
       "Bash(set PYTHONIOENCODING=utf-8)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

@@ -7,6 +7,7 @@ import os
 import io
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict
 
 # Fix Windows console encoding issues
 if sys.platform == 'win32':
@@ -15,6 +16,12 @@ if sys.platform == 'win32':
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+from core.graph import build_graph
+from core.state import State
+from tools import register_default_adapters
+from core.langfuse_tracing import workflow_span, flush_traces
+
 
 def setup_environment():
     """Load environment variables from .env if it exists."""
@@ -29,10 +36,6 @@ def setup_environment():
 def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hours", verbose: bool = False):
     """Run the daily news briefing workflow."""
     
-    from core.graph import build_graph
-    from core.state import State
-    from tools import register_default_adapters
-    
     print("=" * 60)
     print("DAILY NEWS BRIEFING")
     print("=" * 60)
@@ -43,73 +46,111 @@ def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hou
     print("-" * 60)
     print()
     
-    # Register tools
-    print("[1/5] Registering tools...")
-    try:
-        register_default_adapters(silent=False)
-        print("  [OK] Tools registered")
-    except Exception as e:
-        print(f"  [ERROR] Failed to register tools: {e}")
-        return False
-    
-    # Build graph
-    print("[2/5] Building workflow graph...")
-    try:
-        graph = build_graph()
-        print("  [OK] Graph built")
-    except Exception as e:
-        print(f"  [ERROR] Failed to build graph: {e}")
-        return False
-    
-    # Prepare state
-    print("[3/5] Preparing research state...")
-    state = State(
-        user_request=f"Daily briefing on {topic}" + (f" in {industry}" if industry else ""),
-        strategy_slug="daily_news_briefing",
-        time_window=timeframe,  # The fill phase will calculate dates from this
-        vars={
-            "topic": topic,
-            "industry": industry or "",
-            "timeframe": timeframe,
-            # Dates will be calculated and added by the fill phase
-        }
-    )
-    print("  [OK] State prepared")
-    
-    # Run workflow
-    print("[4/5] Running research workflow...")
-    print("  This may take 1-2 minutes...")
-    try:
-        if verbose:
-            print("\n  Progress:")
-            # You could add progress tracking here if the graph supports it
-        
-        # Add thread_id for checkpointer
-        config = {"configurable": {"thread_id": f"briefing_{datetime.now().strftime('%Y%m%d_%H%M%S')}"}}
-        result = graph.invoke(state, config)
-        print(f"  [OK] Research complete")
-        
-        # Handle both dict and object result types
-        if hasattr(result, 'evidence'):
-            evidence = result.evidence
-            sections = result.sections
-            citations = result.citations
-            vars_dict = result.vars
-        else:
-            evidence = result.get('evidence', [])
-            sections = result.get('sections', [])
-            citations = result.get('citations', [])
-            vars_dict = result.get('vars', {})
-        
-        print(f"  - Evidence collected: {len(evidence)} items")
-        print(f"  - Sections generated: {len(sections)}")
-        print(f"  - Citations: {len(citations)}")
-    except Exception as e:
-        print(f"  [ERROR] Workflow failed: {e}")
-        if verbose:
-            import traceback
-            traceback.print_exc()
-        return False
+    workflow_input = {
+        "topic": topic,
+        "industry": industry,
+        "timeframe": timeframe,
+    }
+
+    with workflow_span(
+        name="daily-news-briefing",
+        trace_input=workflow_input,
+        tags=["workflow:daily-briefing"],
+        metadata={"version": "1.0"},
+    ) as tracing:
+        # Register tools
+        print("[1/5] Registering tools...")
+        try:
+            register_default_adapters(silent=False)
+            print("  [OK] Tools registered")
+        except Exception as e:
+            print(f"  [ERROR] Failed to register tools: {e}")
+            tracing.update_trace(metadata={"status": "failed", "error": str(e)})
+            tracing.flush()
+            return False
+
+        # Build graph
+        print("[2/5] Building workflow graph...")
+        try:
+            graph = build_graph()
+            print("  [OK] Graph built")
+        except Exception as e:
+            print(f"  [ERROR] Failed to build graph: {e}")
+            tracing.update_trace(metadata={"status": "failed", "error": str(e)})
+            tracing.flush()
+            return False
+
+        # Prepare state
+        print("[3/5] Preparing research state...")
+        state = State(
+            user_request=f"Daily briefing on {topic}" + (f" in {industry}" if industry else ""),
+            strategy_slug="daily_news_briefing",
+            time_window=timeframe,  # The fill phase will calculate dates from this
+            vars={
+                "topic": topic,
+                "industry": industry or "",
+                "timeframe": timeframe,
+                # Dates will be calculated and added by the fill phase
+            }
+        )
+        print("  [OK] State prepared")
+
+        # Run workflow
+        print("[4/5] Running research workflow...")
+        print("  This may take 1-2 minutes...")
+        try:
+            if verbose:
+                print("\n  Progress:")
+
+            callbacks = []
+            if tracing.handler:
+                callbacks.append(tracing.handler)
+
+            invoke_config: Dict[str, Any] = {
+                "configurable": {"thread_id": f"briefing_{datetime.now().strftime('%Y%m%d_%H%M%S')}"}
+            }
+            if callbacks:
+                invoke_config["callbacks"] = callbacks
+
+            result = graph.invoke(state, invoke_config)
+            print(f"  [OK] Research complete")
+
+            if hasattr(result, 'evidence'):
+                evidence = result.evidence
+                sections = result.sections
+                citations = result.citations
+                vars_dict = result.vars
+            else:
+                evidence = result.get('evidence', [])
+                sections = result.get('sections', [])
+                citations = result.get('citations', [])
+                vars_dict = result.get('vars', {})
+
+            tracing.set_output(
+                output={
+                    "sections": sections,
+                    "citations": citations,
+                    "briefing_content": vars_dict.get("briefing_content"),
+                },
+                metadata={
+                    "status": "success",
+                    "evidence_items": len(evidence),
+                    "sections_count": len(sections),
+                    "citations_count": len(citations),
+                },
+            )
+
+            print(f"  - Evidence collected: {len(evidence)} items")
+            print(f"  - Sections generated: {len(sections)}")
+            print(f"  - Citations: {len(citations)}")
+        except Exception as e:
+            print(f"  [ERROR] Workflow failed: {e}")
+            tracing.update_trace(metadata={"status": "failed", "error": str(e)})
+            if verbose:
+                import traceback
+                traceback.print_exc()
+            tracing.flush()
+            return False
     
     # Output results
     print("[5/5] Generating output...")
@@ -217,6 +258,8 @@ def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hou
         
         print(f"\n[INFO] Briefing saved to: {filename}")
     
+    tracing.flush()
+    flush_traces()
     return True
 
 def main():

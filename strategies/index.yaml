@@ -1,0 +1,89 @@
+strategies:
+  - slug: news/real_time_briefing
+    title: Real-Time News Briefing
+    category: news
+    time_window: day
+    depth: brief
+    description: Fast-turnaround briefing for breaking news topics.
+    priority: 10
+    fan_out: none
+    required_variables:
+      - name: topic
+        description: Primary subject to monitor in the briefing.
+  - slug: daily_news_briefing
+    title: Daily News Deep Dive
+    category: news
+    time_window: day
+    depth: deep
+    description: Comprehensive daily coverage with multiple tool passes.
+    priority: 20
+    fan_out: none
+    required_variables:
+      - name: topic
+        description: Central topic for the daily briefing.
+  - slug: news_monitoring
+    title: Ongoing News Monitoring
+    category: news
+    time_window: day
+    depth: comprehensive
+    description: High-volume monitoring workflow for continuous updates.
+    priority: 30
+    fan_out: none
+    required_variables:
+      - name: topic
+        description: Subject to track across monitoring queries.
+  - slug: general/week_overview
+    title: Weekly Overview
+    category: general
+    time_window: week
+    depth: overview
+    description: Broad scan for general-interest topics over the past week.
+    priority: 10
+    fan_out: none
+    required_variables:
+      - name: topic
+        description: Theme to investigate for the weekly overview.
+  - slug: company/dossier
+    title: Company Dossier
+    category: company
+    time_window: month
+    depth: deep
+    description: Profile-building run focused on corporate background research.
+    priority: 10
+    fan_out: none
+    required_variables:
+      - name: topic
+        description: Company name or ticker to profile.
+  - slug: financial_news_reactive
+    title: Financial News Reactive Briefing
+    category: financial
+    time_window: day
+    depth: comprehensive
+    description: Rapid response workflow for financial market movements.
+    priority: 15
+    fan_out: none
+    required_variables:
+      - name: topic
+        description: Financial entity or market focus for the update.
+  - slug: financial_research
+    title: Financial Research Deep Dive
+    category: finance
+    time_window: week
+    depth: deep
+    description: Extended analysis workflow for financial markets and sectors.
+    priority: 20
+    fan_out: none
+    required_variables:
+      - name: topic
+        description: Financial topic or sector for the deep dive.
+  - slug: research_paper_analysis
+    title: Research Paper Analysis
+    category: academic
+    time_window: month
+    depth: deep
+    description: Academic-focused workflow targeting recent research publications.
+    priority: 25
+    fan_out: none
+    required_variables:
+      - name: topic
+        description: Research subject to analyze.

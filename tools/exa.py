@@ -6,6 +6,7 @@ from typing import Any, List
 import os
 
 from core.state import Evidence
+from core.langfuse_tracing import get_langfuse_client, observe
 
 
 class ExaAdapter:
@@ -23,6 +24,7 @@ class ExaAdapter:
 
         return Exa(self.api_key)
 
+    @observe(as_type="span", name="exa-search")
     def search(self, query: str, **params: Any) -> List[Evidence]:
         """Execute a search with full parameter support.
         
@@ -80,6 +82,14 @@ class ExaAdapter:
             if key not in api_params:
                 api_params[key] = value
         
+        lf_client = get_langfuse_client()
+        if lf_client:
+            lf_client.update_current_span(
+                name="exa-search",
+                input={"query": query, "params": api_params},
+                metadata={"adapter": "exa", "method": "search"},
+            )
+
         response = client.search(query, **api_params)
         results = response.get("results") if isinstance(response, dict) else getattr(response, "results", [])
         evidence: List[Evidence] = []
@@ -96,8 +106,18 @@ class ExaAdapter:
                     score=r.get("score") if isinstance(r, dict) else getattr(r, "score", None),
                 )
             )
+        if lf_client:
+            preview = results[:5] if isinstance(results, list) else results
+            lf_client.update_current_span(
+                output={
+                    "sample": preview,
+                    "total_results": len(results) if isinstance(results, list) else None,
+                },
+                metadata={"status": "success", "response_size": len(str(results))},
+            )
         return evidence
 
+    @observe(as_type="span", name="exa-contents")
     def contents(self, urls: str | List[str], **params: Any) -> List[Evidence]:
         """Retrieve contents from URLs with full parameter support.
         
@@ -132,6 +152,14 @@ class ExaAdapter:
             if key not in api_params:
                 api_params[key] = value
         
+        lf_client = get_langfuse_client()
+        if lf_client:
+            lf_client.update_current_span(
+                name="exa-contents",
+                input={"urls": urls, "params": api_params},
+                metadata={"adapter": "exa", "method": "contents"},
+            )
+
         response = client.get_contents(urls, **api_params)
         
         # Handle response based on structure
@@ -172,9 +200,15 @@ class ExaAdapter:
                 snippet=text,
                 tool=self.name
             ))
-        
+        if lf_client:
+            preview = results[:3] if isinstance(results, list) else results
+            lf_client.update_current_span(
+                output={"sample": preview},
+                metadata={"status": "success"},
+            )
         return evidence
 
+    @observe(as_type="span", name="exa-find-similar")
     def find_similar(self, url: str, **params: Any) -> List[Evidence]:
         """Find similar pages with full parameter support.
         
@@ -222,6 +256,14 @@ class ExaAdapter:
             if key not in api_params:
                 api_params[key] = value
         
+        lf_client = get_langfuse_client()
+        if lf_client:
+            lf_client.update_current_span(
+                name="exa-find-similar",
+                input={"url": url, "params": api_params},
+                metadata={"adapter": "exa", "method": "find_similar"},
+            )
+
         response = client.find_similar(url, **api_params)
         results = response.get("results") if isinstance(response, dict) else getattr(response, "results", [])
         
@@ -245,8 +287,17 @@ class ExaAdapter:
                     score=score
                 )
             )
+        if lf_client:
+            lf_client.update_current_span(
+                output={
+                    "sample": results[:5] if isinstance(results, list) else results,
+                    "total_results": len(results) if isinstance(results, list) else None,
+                },
+                metadata={"status": "success"},
+            )
         return evidence
 
+    @observe(as_type="span", name="exa-answer")
     def answer(self, query: str, **params: Any) -> str:
         """Get direct answers to questions.
         
@@ -267,8 +318,22 @@ class ExaAdapter:
             if key not in api_params:
                 api_params[key] = value
         
+        lf_client = get_langfuse_client()
+        if lf_client:
+            lf_client.update_current_span(
+                name="exa-answer",
+                input={"query": query, "params": api_params},
+                metadata={"adapter": "exa", "method": "answer"},
+            )
+
         response = client.answer(query, **api_params)
-        return response.get("answer") if isinstance(response, dict) else getattr(response, "answer", "")
+        answer_text = response.get("answer") if isinstance(response, dict) else getattr(response, "answer", "")
+        if lf_client:
+            lf_client.update_current_span(
+                output={"answer": answer_text},
+                metadata={"status": "success"},
+            )
+        return answer_text
 
     def call(self, *args: Any, **kwargs: Any) -> List[Evidence]:
         """Default call proxies to ``search`` for registry uniformity."""

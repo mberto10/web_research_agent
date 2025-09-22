@@ -6,6 +6,8 @@ def test_categorize_request_news():
     assert result["category"] == "news"
     assert result["time_window"] == "day"
     assert result["depth"] == "brief"
+    assert result["strategy_slug"]
+    assert result["variables"]["topic"]
 
 
 def test_split_tasks():
@@ -18,3 +20,5 @@ def test_scope_request_fallback():
     assert result["category"] == "general"
     assert result["time_window"] == "week"
     assert result["tasks"] == ["economy", "politics"]
+    assert result["strategy_slug"]
+    assert result["variables"]["topic"]

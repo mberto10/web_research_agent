@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 import os
 
 from core.state import Evidence
+from core.langfuse_tracing import get_langfuse_client, observe
 
 
 class SonarAdapter:
@@ -37,6 +38,7 @@ class SonarAdapter:
         )
         return client.chat.completions.create(model=self.model, messages=messages, **params)
 
+    @observe(as_type="generation", name="sonar-call")
     def call(self, prompt: str, **params: Any) -> List[Evidence]:
         """Execute a chat completion and return normalized citation evidence.
         
@@ -74,10 +76,19 @@ class SonarAdapter:
             if key not in api_params and key != "system_prompt":
                 api_params[key] = value
         
+        lf_client = get_langfuse_client()
+        if lf_client:
+            lf_client.update_current_generation(
+                model=self.model,
+                input={"prompt": prompt, "params": api_params},
+                metadata={"adapter": "sonar"},
+            )
+
+        citations = None
         response = self._chat_completion(messages, **api_params)
-        
+
         evidence: List[Evidence] = []
-        
+
         # First check for search_results (new API format with more metadata)
         search_results = None
         if hasattr(response, 'search_results'):
@@ -128,6 +139,22 @@ class SonarAdapter:
                             tool=self.name,
                         )
                     )
+        if lf_client:
+            usage = getattr(response, "usage", None)
+            usage_details = None
+            if usage:
+                usage_details = {
+                    "input_tokens": getattr(usage, "prompt_tokens", None) or getattr(usage, "promptTokens", None),
+                    "output_tokens": getattr(usage, "completion_tokens", None) or getattr(usage, "completionTokens", None),
+                    "total_tokens": getattr(usage, "total_tokens", None) or getattr(usage, "totalTokens", None),
+                }
+            lf_client.update_current_generation(
+                output={
+                    "search_results": search_results[:5] if isinstance(search_results, list) else search_results,
+                    "citations": citations,
+                },
+                usage_details=usage_details,
+            )
         return evidence
 
 

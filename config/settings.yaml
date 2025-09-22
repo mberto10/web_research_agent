@@ -1,34 +1,83 @@
 llm:
+  # ---------------------------------------------------------------------------
+  # Global defaults applied to core LangGraph nodes. Each section maps directly
+  # to helper functions in `core/config.py`, which in turn are consumed at the
+  # following integration points:
+  #   - fill/summarize/qc/renderer/analyzer/cluster -> get_llm_config(...)
+  #   - nodes.*                                     -> get_node_llm_config(...)
+  # Changing these values alters which foundation model (and tuning params)
+  # every workflow node invokes by default.
+  # ---------------------------------------------------------------------------
   defaults:
+    # LLM used when the fill phase asks for runtime parameter generation
     fill:
       model: gpt-5-mini
       temperature: 0.3
+    # Model for evidence clustering / summarization steps
     summarize:
       model: gpt-5-mini
       temperature: 0.2
+    # Guardrails invoked during the QC node (`core/graph.qc`)
     qc:
       model: gpt-5-mini
       temperature: 0
+    # Post-processing renderer prompts (e.g. markdown/newsletter output)
     renderer:
       model: gpt-5-mini
       temperature: 0.2
+    # Tool adapter `LLMAnalyzerAdapter` (used by strategies that synthesize
+    # whole briefings inside finalize/write phases)
     analyzer:
       model: gpt-5-mini
       temperature: 0.3
+    # Utility model invoked by `_cluster_llm` during evidence grouping
     cluster:
       model: gpt-5-mini
       temperature: 0.2
+    # Node-level overrides. Each key matches a LangGraph node or helper that
+    # calls `get_node_llm_config`.
+    nodes:
+      # Controls the scope classifier LLM in `core/scope._llm_scope`
+      scope_classifier:
+        model: gpt-5-mini
+        temperature: 0
+      # Used by `_refine_queries_with_llm` to propose follow-up searches
+      query_refiner:
+        model: gpt-5-mini
+        temperature: 0
+      # Governs the ReAct finalize loop in `_finalize_reactive`
+      finalize_react:
+        model: gpt-5-mini
+        temperature: 0
+      # Adapter-specific override for the LLM analyzer tool
+      llm_analyzer:
+        model: gpt-5-mini
+        temperature: 0.3
+
+  # Strategy-specific overrides. When a YAML strategy is selected, values below
+  # replace the defaults for the matching slug. Useful for tailoring distinct
+  # workflows without code changes.
   per_strategy:
     daily_news_briefing:
       fill:
-        temperature: 0.4  # Slightly more creative for diverse searches
+        temperature: 0.4  # Encourage more diverse search params for breaking news
       renderer:
-        model: gpt-5-mini  # Using same model everywhere
+        model: gpt-5-mini  # Keep renderer aligned even if global default drifts
       analyzer:
         model: gpt-5-mini
+      nodes:
+        finalize_react:
+          model: gpt-5-mini
+
+  # Per-tool-step overrides (e.g. provider.use combinations). Empty by default.
   per_step: {}
 
 prompts:
+  # ---------------------------------------------------------------------------
+  # Prompt templates consumed by `get_prompt` and `get_node_prompt`. Each block
+  # directly maps to a LangGraph node or helper. Editing the copy here changes
+  # the instruction set fed to the corresponding LLM call.
+  # ---------------------------------------------------------------------------
   fill:
     instructions: |
       Analyze the task context and generate appropriate search parameters.
@@ -64,4 +113,80 @@ prompts:
         "warnings": ["specific quality issues"],
         "improvement_suggestions": ["actionable recommendations"]
       }
+  nodes:
+    # Used by `core/scope._llm_scope` before the heuristic fallback kicks in
+    scope_classifier: |
+      You are the scope classification assistant for a research graph. Review the available
+      strategies and choose the best fit for the user's request.
 
+      Strategy catalog:
+      {strategies_table}
+
+      Respond by calling the `set_scope` tool. Always provide:
+      - `strategy_slug`: the slug from the catalog
+      - `category`, `time_window`, `depth`: matching the chosen strategy
+      - `tasks`: 2-5 short bullet-style tasks that cover the user's needs
+      - `variables`: map every required variable name for the chosen strategy to a concrete string value
+
+      For reference, here is the catalog in JSON form:
+      {strategies_json}
+
+      User request: {request}
+    # Passed into `_refine_queries_with_llm` inside the research loop
+    query_refiner: |
+      Given the snippets below, suggest refined search queries for the listed tools. Return a
+      JSON object mapping tool names to query strings.
+      Snippets:
+      {snippets}
+
+      Tools: {tools}
+    # System message for the first ReAct call during finalize phase
+    finalize_react_system: |
+      You are a ReAct agent. First analyze the evidence, decide if a tool call is needed, then
+      produce the requested report. Never offer additional services or follow-up questions.
+    # User message for the analysis/tool-selection pass in `_finalize_reactive`
+    finalize_react_analysis: |
+      You are a ReAct agent that analyzes evidence, can call tools if needed, and writes report
+      sections.
+
+      Current evidence ({evidence_count} sources):
+      {evidence_text}
+
+      Topic: {topic}
+      Time window: {time_window}
+      Current date: {current_date}
+
+      Instructions:
+      {instructions}
+
+      Think step by step:
+      1. Review the evidence - is it complete and recent enough?
+      2. If critical information is missing, make ONE tool call to fill the gap
+      3. Then write the report sections
+
+      Available tools you can use:
+      - exa_answer: Get a direct answer to a question
+      - exa_search: Search for information
+      - sonar_call: Get an AI-generated response with web search
+
+      Respond with your analysis and actions.
+    # Follow-up prompt that instructs the model to write the final report
+    finalize_react_writer: |
+      Based on all the evidence (including new information from tool calls), write the report.
+
+      Updated evidence ({evidence_count} sources):
+      {evidence_text}
+
+      Write these sections with markdown headers (##):
+      {sections_prompt}
+
+      IMPORTANT RULES:
+      1. Each section starts with ## and the section name
+      2. Use [1], [2], [3] etc. to cite sources in the text
+      3. End with a ## Sources section listing all sources with numbers
+      4. Do NOT add any offers or follow-up questions
+      5. End the report immediately after the Sources section
+    # System message for `LLMAnalyzerAdapter` (strategies that hand rendering to the tool)
+    llm_analyzer_system: |
+      You are a research analyst that provides clear, structured analysis.
+  per_strategy: {}
