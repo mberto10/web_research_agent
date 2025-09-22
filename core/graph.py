@@ -21,6 +21,7 @@ from .config import (
     get_node_prompt,
 )
 from .langfuse_tracing import get_langfuse_client, observe
+from .debug_log import dbg
 from tools import get_tool, register_default_adapters
 from .scope import categorize_request, split_tasks
 from strategies import load_strategy, select_strategy, get_index_entry_by_slug
@@ -274,6 +275,10 @@ def _refine_queries_with_llm(
         snippets=snippets_block or "-",
         tools=", ".join(allowed_keys),
     )
+    try:
+        dbg.prompt("query_refiner", prompt, model=get_node_llm_config("query_refiner", strategy_slug).get("model", "gpt-4o-mini"), tools=allowed_keys)
+    except Exception:
+        pass
 
     try:
         from openai import OpenAI  # Imported lazily
@@ -302,6 +307,7 @@ def _refine_queries_with_llm(
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
             **call_kwargs,
         )
         content = response.choices[0].message["content"]
@@ -319,6 +325,7 @@ def _refine_queries_with_llm(
                 usage_details=usage_details,
             )
         data = json.loads(content)
+        dbg.event("query_refiner.result", raw=content)
     except Exception:
         return {}
 
@@ -336,6 +343,14 @@ def _refine_queries_with_llm(
 
 def scope(state: State) -> State:
     """Scope phase categorizes the request and selects a strategy."""
+    dbg.event(
+        "scope.start",
+        user_request=state.user_request,
+        category=state.category,
+        time_window=state.time_window,
+        depth=state.depth,
+        strategy_slug=state.strategy_slug,
+    )
     # Categorize if needed
     if not (state.category and state.time_window and state.depth):
         cat = categorize_request(state.user_request)
@@ -375,6 +390,15 @@ def scope(state: State) -> State:
             state.strategy_slug = slug
             # Load strategy to surface validation errors early.
             load_strategy(slug)
+    dbg.event(
+        "scope.result",
+        category=state.category,
+        time_window=state.time_window,
+        depth=state.depth,
+        strategy_slug=state.strategy_slug,
+        tasks=state.tasks,
+        variables=state.vars,
+    )
     return state
 
 
@@ -414,6 +438,12 @@ def research(state: State) -> State:
         else ""
     )
     canonical_topic = single_topic if isinstance(single_topic, str) else str(single_topic)
+    dbg.event(
+        "research.start",
+        strategy=state.strategy_slug,
+        fan_out=fan_out_policy,
+        topic=canonical_topic,
+    )
 
     if fan_out_policy == "task" and state.tasks:
         for t in state.tasks:
@@ -480,6 +510,7 @@ def research(state: State) -> State:
                         prompt_t = task_queries.get("sonar", "{{topic}}")
                         prompt = _render_template(prompt_t, variables)
                         tool = get_tool("sonar")
+                        dbg.tool_call("sonar", "call", {"prompt": prompt, **step.get("params", {})})
                         results = tool.call(prompt, **step.get("params", {}))
                     elif name.startswith("exa_search"):
                         query_t = task_queries.get("exa_search", "{{topic}}")
@@ -489,24 +520,32 @@ def research(state: State) -> State:
                             for key, val in step.get("params", {}).items()
                         }
                         tool = get_tool("exa")
+                        dbg.tool_call("exa", "search", {"query": query, **params})
                         results = tool.call(query, **params)
                     elif name.startswith("exa_contents"):
                         top_k = step.get("params", {}).get("top_k", 0)
                         tool = get_tool("exa")
                         fetched: List[Evidence] = []
                         for ev in last_results[:top_k]:
-                            content = tool.contents(
-                                ev.url,
-                                **{k: v for k, v in step.get("params", {}).items() if k != "top_k"},
-                            )
-                            if content.snippet:
-                                ev.snippet = content.snippet
+                            call_params = {k: v for k, v in step.get("params", {}).items() if k != "top_k"}
+                            dbg.tool_call("exa", "contents", {"url": ev.url, **call_params})
+                            content = tool.contents(ev.url, **call_params)
+                            # Normalize various return shapes (list[Evidence] | Evidence)
+                            snippet_val = None
+                            if isinstance(content, list) and content:
+                                first = content[0]
+                                snippet_val = getattr(first, "snippet", None)
+                            elif isinstance(content, Evidence):
+                                snippet_val = content.snippet
+                            if snippet_val:
+                                ev.snippet = snippet_val
                             fetched.append(ev)
                         results = fetched
                     elif name.startswith("exa_find_similar"):
                         seed = last_results[0].url if last_results else ""
                         if seed:
                             tool = get_tool("exa")
+                            dbg.tool_call("exa", "find_similar", {"url": seed, **step.get("params", {})})
                             results = tool.find_similar(seed, **step.get("params", {}))
                         else:
                             results = []
@@ -514,6 +553,7 @@ def research(state: State) -> State:
                         query_t = task_queries.get("exa_answer", "{{topic}}")
                         query = _render_template(query_t, variables)
                         tool = get_tool("exa")
+                        dbg.tool_call("exa", "answer", {"query": query, **step.get("params", {})})
                         answer_text = tool.answer(query, **step.get("params", {}))
                         results = [
                             Evidence(
@@ -531,6 +571,13 @@ def research(state: State) -> State:
 
                 _record_evidence(results, task_evidence)
                 last_results = _as_evidence_list(results)
+                if last_results:
+                    dbg.tool_result(
+                        provider="sonar" if name.startswith("sonar") else "exa",
+                        method="call" if name.startswith("sonar") else name.replace("exa_", ""),
+                        count=len(last_results),
+                        sample=[ev.url for ev in last_results[:5]],
+                    )
 
                 remaining = research_steps[idx + 1 :]
                 allowed_keys = [
@@ -577,6 +624,12 @@ def research(state: State) -> State:
                             state.vars,
                             overrides=overrides,
                         )
+                        # Log generic tool call
+                        try:
+                            provider, method = use.split(".", 1)
+                        except Exception:
+                            provider, method = use, "call"
+                        dbg.tool_call(provider, method, inputs)
                         result = _execute_use(use, inputs)
                         step_outputs.append(result)
                         _record_evidence(result, task_evidence)
@@ -594,6 +647,11 @@ def research(state: State) -> State:
                     state.vars,
                     overrides=overrides,
                 )
+                try:
+                    provider, method = use.split(".", 1)
+                except Exception:
+                    provider, method = use, "call"
+                dbg.tool_call(provider, method, inputs)
                 results = _execute_use(use, inputs)
             except Exception as exc:  # pragma: no cover - defensive
                 _log_step_error(step_label, exc)
@@ -605,6 +663,12 @@ def research(state: State) -> State:
             new_results = _as_evidence_list(results)
             if new_results:
                 last_results = new_results
+                dbg.tool_result(
+                    provider=provider,
+                    method=method,
+                    count=len(new_results),
+                    sample=[ev.url for ev in new_results[:5]],
+                )
 
         # End for over research steps
 
@@ -837,6 +901,13 @@ def fill(state: State) -> State:
         "yearly": "year"
     }
     state.vars["search_recency_filter"] = recency_map.get(state.time_window.lower() if state.time_window else "day", "week")
+    dbg.event(
+        "fill.dates",
+        current_date=state.vars.get("current_date"),
+        start_date=state.vars.get("start_date"),
+        end_date=state.vars.get("end_date"),
+        recency_filter=state.vars.get("search_recency_filter"),
+    )
 
     runtime_plan: List[Dict[str, Any]] = []
     limits = strategy.limits or {}
@@ -866,6 +937,22 @@ def fill(state: State) -> State:
         runtime_plan.append(entry)
 
     state.vars["runtime_plan"] = runtime_plan
+    try:
+        dbg.event(
+            "fill.runtime_plan",
+            steps=[
+                {
+                    "use": e.get("use"),
+                    "name": e.get("name"),
+                    "phase": e.get("phase"),
+                    "llm_fill": e.get("llm_fill"),
+                    "description": e.get("description"),
+                }
+                for e in runtime_plan
+            ],
+        )
+    except Exception:
+        pass
     return state
 
 
@@ -1026,6 +1113,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
         current_date=state.vars.get("current_date", ""),
         instructions=instructions,
     )
+    dbg.prompt("finalize.react.analysis", analysis_prompt, model=model, system=system_prompt)
 
     tools_payload = [
         {
@@ -1087,7 +1175,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                 input={
                     "analysis_prompt": analysis_prompt,
                     "instructions": instructions,
-                    "topic": topic,
+                    "topic": topic_guess,
                 },
                 metadata={"component": "finalize_react_analysis"},
             )
@@ -1123,11 +1211,13 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
             tool_call = message.tool_calls[0]
             function_name = tool_call.function.name
             arguments = json.loads(tool_call.function.arguments)
+            dbg.event("finalize.react.tool_choice", function=function_name, arguments=arguments)
 
             # Execute only the first tool call
             try:
                 if function_name == "exa_answer":
                     tool = get_tool("exa")
+                    dbg.tool_call("exa", "answer", {"query": arguments.get("query")})
                     result = tool.answer(arguments["query"])
                     # Add result as evidence
                     state.evidence.append(Evidence(
@@ -1141,12 +1231,14 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                 elif function_name == "exa_search":
                     tool = get_tool("exa")
                     params = {k: v for k, v in arguments.items() if k != "query"}
+                    dbg.tool_call("exa", "search", {"query": arguments.get("query"), **params})
                     results = tool.search(arguments["query"], **params)
                     state.evidence.extend(results)
 
                 elif function_name == "sonar_call":
                     tool = get_tool("sonar")
                     params = {k: v for k, v in arguments.items() if k != "prompt"}
+                    dbg.tool_call("sonar", "call", {"prompt": arguments.get("prompt"), **params})
                     results = tool.call(arguments["prompt"], **params)
                     state.evidence.extend(results)
             except Exception:
@@ -1183,6 +1275,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                 evidence_text="\n".join(updated_lines),
                 sections_prompt=sections_prompt,
             )
+            dbg.prompt("finalize.react.writer", writer_prompt, model=model)
 
             if lf_client:
                 lf_client.update_current_generation(
@@ -1223,15 +1316,23 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                 report_start = report_content.find("## ")
                 if report_start > 0:
                     report_content = report_content[report_start:]
+        dbg.event("finalize.react.report", length=len(report_content or ""))
         
         # Try to extract citations from a '## Sources' section
         try:
+            # Prefer explicit markdown header; fallback to any 'sources' marker
             src_idx = report_content.lower().find("## sources")
+            if src_idx == -1:
+                src_idx = report_content.lower().find("\nsources\n")
+            if src_idx == -1:
+                src_idx = report_content.lower().find("\n## sources")
             if src_idx != -1:
                 sources_block = report_content[src_idx:]
                 lines = sources_block.splitlines()
                 # drop the header line
                 if lines and lines[0].strip().lower().startswith("## sources"):
+                    lines = lines[1:]
+                elif lines and lines[0].strip().lower() == "sources":
                     lines = lines[1:]
                 parsed: List[str] = []
                 for ln in lines:
@@ -1247,6 +1348,10 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                         if c not in existing:
                             state.citations.append(c)
                             existing.add(c)
+                    try:
+                        dbg.event("finalize.react.citations", count=len(parsed), sample=parsed[:5])
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -1294,7 +1399,18 @@ def _execute_use(use: str, inputs: Dict[str, Any]) -> Any:
         logger.error("Adapter '%s' has no callable for method '%s'", provider, method)
         return []
     try:
-        return fn(**inputs) if isinstance(inputs, dict) else fn(inputs)
+        # Log generic tool call (may duplicate higher-level logs, acceptable in debug)
+        try:
+            dbg.tool_call(provider, method, inputs if isinstance(inputs, dict) else {"arg": inputs})
+        except Exception:
+            pass
+        result = fn(**inputs) if isinstance(inputs, dict) else fn(inputs)
+        try:
+            evs = _as_evidence_list(result)
+            dbg.tool_result(provider, method, count=len(evs), sample=[ev.url for ev in evs[:5]] if evs else None)
+        except Exception:
+            pass
+        return result
     except TypeError as exc:
         logger.debug("Attempting positional fallback for %s due to TypeError: %s", use, exc)
         # Try positional fallback
@@ -1375,6 +1491,10 @@ def _llm_fill_inputs_simple(description: str, allowed: Dict[str, Any], model: st
         + f"Task: {description or 'fill search query parameters'}\n"
         + "Respond as a JSON object."
     )
+    try:
+        dbg.prompt("fill.llm", instructions, model=model or "gpt-4o-mini")
+    except Exception:
+        pass
     if lf_client:
         lf_client.update_current_generation(
             model=model or "gpt-4o-mini",
@@ -1409,6 +1529,10 @@ def _llm_fill_inputs_simple(description: str, allowed: Dict[str, Any], model: st
         import json as _json
 
         data = _json.loads(content)
+        try:
+            dbg.event("fill.llm.result", filled_keys=list(data.keys()) if isinstance(data, dict) else [])
+        except Exception:
+            pass
         if isinstance(data, dict):
             return {k: str(v) if not isinstance(v, str) else v for k, v in data.items() if k in allowed}
     except Exception:

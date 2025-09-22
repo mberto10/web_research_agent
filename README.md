@@ -130,7 +130,7 @@ print("\n\n".join(final.sections))
 ## Environment
 
 - `OPENAI_API_KEY` required for LLM calls.
-- Tool adapters may require their own keys (e.g., `EXA_API_KEY`, `SONAR_API_KEY`).
+- Tool adapters may require their own keys (e.g., `EXA_API_KEY`, `SONAR_API_KEY` or `PERPLEXITY_API_KEY`).
 - Optional Langfuse tracing via `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`.
 
 ## Testing

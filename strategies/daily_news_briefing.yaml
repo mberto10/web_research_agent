@@ -114,7 +114,7 @@ limits:
   max_llm_queries: 2
 
 finalize:
-  reactive: true
+  reactive: false
   instructions: |
     You are writing a daily news briefing about {{topic}}.
     

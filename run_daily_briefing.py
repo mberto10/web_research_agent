@@ -21,6 +21,7 @@ from core.graph import build_graph
 from core.state import State
 from tools import register_default_adapters
 from core.langfuse_tracing import workflow_span, flush_traces
+from core.debug_log import dbg
 
 
 def setup_environment():
@@ -33,7 +34,7 @@ def setup_environment():
     except ImportError:
         pass
 
-def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hours", verbose: bool = False):
+def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hours", verbose: bool = False, debug: bool = False, debug_file: str | None = None):
     """Run the daily news briefing workflow."""
     
     print("=" * 60)
@@ -111,6 +112,12 @@ def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hou
             }
             if callbacks:
                 invoke_config["callbacks"] = callbacks
+
+            # Enable debug logging if requested (or via env)
+            if debug:
+                dbg.enable(True)
+            else:
+                dbg.maybe_enable_from_env()
 
             result = graph.invoke(state, invoke_config)
             print(f"  [OK] Research complete")
@@ -260,6 +267,20 @@ def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hou
     
     tracing.flush()
     flush_traces()
+    # Emit debug log after run
+    if dbg.is_enabled():
+        try:
+            print("\nDEBUG LOG (summary)")
+            print("-" * 60)
+            summary = dbg.dump_text()
+            # Limit console spam but ensure full prompts exist in file
+            print(summary[:8000] + ("\n... [truncated console view]" if len(summary) > 8000 else ""))
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            out_path = debug_file or f"debug_log_{ts}.json"
+            dbg.flush_to_file(out_path)
+            print(f"\n[INFO] Full debug log saved to: {out_path}")
+        except Exception:
+            pass
     return True
 
 def main():
@@ -269,6 +290,8 @@ def main():
     parser.add_argument('--timeframe', '-f', default='last 24 hours', 
                        help='Timeframe (default: "last 24 hours")')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    parser.add_argument('--debug', action='store_true', help='Enable full debug logging (prompts, tool calls, decisions)')
+    parser.add_argument('--debug-file', help='Path to save full debug log JSON')
     
     args = parser.parse_args()
     
@@ -283,8 +306,8 @@ def main():
     if not os.getenv('EXA_API_KEY'):
         print("[ERROR] EXA_API_KEY not set")
         has_keys = False
-    if not (os.getenv('SONAR_API_KEY') or os.getenv('OPENAI_API_KEY')):
-        print("[ERROR] Neither SONAR_API_KEY nor OPENAI_API_KEY set (need at least one)")
+    if not (os.getenv('SONAR_API_KEY') or os.getenv('PERPLEXITY_API_KEY')):
+        print("[ERROR] Neither SONAR_API_KEY nor PERPLEXITY_API_KEY set (need at least one)")
         has_keys = False
     
     if not has_keys:
@@ -296,7 +319,9 @@ def main():
         topic=args.topic,
         industry=args.industry,
         timeframe=args.timeframe,
-        verbose=args.verbose
+        verbose=args.verbose,
+        debug=args.debug,
+        debug_file=args.debug_file,
     )
     
     if not success:

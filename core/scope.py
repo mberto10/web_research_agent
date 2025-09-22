@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from core.config import get_node_llm_config, get_node_prompt
 from core.langfuse_tracing import get_langfuse_client, observe
+from core.debug_log import dbg
 from strategies import StrategyIndexEntry, load_strategy_index
 
 
@@ -263,6 +264,11 @@ def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
     prompt = _format_scope_prompt(prompt_template, request, entries)
     if not prompt:
         return None
+    try:
+        model = get_node_llm_config("scope_classifier").get("model", "gpt-4o-mini")
+        dbg.prompt("scope.classifier", prompt, model=model)
+    except Exception:
+        pass
 
     lf_client = get_langfuse_client()
 
@@ -305,6 +311,10 @@ def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
 
         raw_args = arguments if isinstance(arguments, str) else json.dumps(arguments)
         data = json.loads(raw_args)
+        try:
+            dbg.event("scope.classifier.result", data=data)
+        except Exception:
+            pass
 
         if lf_client:
             usage = getattr(response, "usage", None)

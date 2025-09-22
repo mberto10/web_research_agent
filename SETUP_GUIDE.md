@@ -13,7 +13,7 @@ You need the following API keys for the daily news briefing to work:
 | Service | Environment Variable | Purpose | Get Key From |
 |---------|---------------------|---------|--------------|
 | OpenAI | `OPENAI_API_KEY` | LLM analysis, QC, summarization | https://platform.openai.com/api-keys |
-| Perplexity | `SONAR_API_KEY` or `OPENAI_API_KEY` | Sonar search (broad overview) | https://docs.perplexity.ai |
+| Perplexity (Sonar) | `SONAR_API_KEY` or `PERPLEXITY_API_KEY` | Sonar search (broad overview) | https://docs.perplexity.ai |
 | Exa | `EXA_API_KEY` | Semantic search, answers | https://exa.ai |
 
 ## Installation Steps
@@ -77,6 +77,8 @@ Create a `.env` file in the project root:
 OPENAI_API_KEY=your-openai-api-key-here
 EXA_API_KEY=your-exa-api-key-here
 SONAR_API_KEY=your-perplexity-api-key-here
+# Or, alternatively
+PERPLEXITY_API_KEY=your-perplexity-api-key-here
 ```
 
 Then load it using python-dotenv:
@@ -147,7 +149,7 @@ pip install exa-py
 ```
 
 ### Issue: "Sonar API key required"
-**Solution:** Either set `SONAR_API_KEY` or `OPENAI_API_KEY` (Sonar can use OpenAI key)
+**Solution:** Set `SONAR_API_KEY` or `PERPLEXITY_API_KEY` (Perplexity Sonar API)
 
 ### Issue: "Strategy not found"
 **Solution:** Ensure the strategy YAML file exists in the strategies/ directory

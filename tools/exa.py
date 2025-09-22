@@ -98,10 +98,21 @@ class ExaAdapter:
             evidence.append(
                 Evidence(
                     url=url or "",
-                    title=r.get("title") if isinstance(r, dict) else getattr(r, "title", None),
-                    publisher=r.get("author") if isinstance(r, dict) else getattr(r, "author", None),  # Changed from 'source' to 'author'
-                    date=r.get("published_date") if isinstance(r, dict) else getattr(r, "published_date", None),  # Changed from 'publishedDate' to 'published_date'
-                    snippet=r.get("text") if isinstance(r, dict) else getattr(r, "text", None),  # Changed from 'snippet' to 'text'
+                    title=(
+                        r.get("title") if isinstance(r, dict) else getattr(r, "title", None)
+                    ),
+                    publisher=(
+                        (r.get("author") or r.get("source")) if isinstance(r, dict)
+                        else (getattr(r, "author", None) or getattr(r, "source", None))
+                    ),
+                    date=(
+                        (r.get("published_date") or r.get("publishedDate")) if isinstance(r, dict)
+                        else (getattr(r, "published_date", None) or getattr(r, "publishedDate", None))
+                    ),
+                    snippet=(
+                        (r.get("text") or r.get("snippet")) if isinstance(r, dict)
+                        else (getattr(r, "text", None) or getattr(r, "snippet", None))
+                    ),
                     tool=self.name,
                     score=r.get("score") if isinstance(r, dict) else getattr(r, "score", None),
                 )
@@ -181,6 +192,8 @@ class ExaAdapter:
                 text = result.text
             elif isinstance(result, dict) and 'text' in result:
                 text = result['text']
+            elif isinstance(result, dict) and 'content' in result:
+                text = result['content']
             
             if hasattr(result, 'title'):
                 title = result.title
@@ -271,9 +284,18 @@ class ExaAdapter:
         for r in results:
             u = r.get("url") if isinstance(r, dict) else getattr(r, "url", None)
             title = r.get("title") if isinstance(r, dict) else getattr(r, "title", None)
-            published_date = r.get("published_date") if isinstance(r, dict) else getattr(r, "published_date", None)
-            author = r.get("author") if isinstance(r, dict) else getattr(r, "author", None)
-            text = r.get("text") if isinstance(r, dict) else getattr(r, "text", None)
+            published_date = (
+                (r.get("published_date") or r.get("publishedDate")) if isinstance(r, dict)
+                else (getattr(r, "published_date", None) or getattr(r, "publishedDate", None))
+            )
+            author = (
+                (r.get("author") or r.get("source")) if isinstance(r, dict)
+                else (getattr(r, "author", None) or getattr(r, "source", None))
+            )
+            text = (
+                (r.get("text") or r.get("snippet")) if isinstance(r, dict)
+                else (getattr(r, "text", None) or getattr(r, "snippet", None))
+            )
             score = r.get("score") if isinstance(r, dict) else getattr(r, "score", None)
             
             evidence.append(

@@ -44,23 +44,38 @@ def check_dependencies():
     return missing_required, missing_optional
 
 def check_api_keys():
-    """Check which API keys are configured."""
-    keys = {
-        'OPENAI_API_KEY': ('OpenAI/LLM Analysis', True),
-        'EXA_API_KEY': ('Exa Search', True),
-        'SONAR_API_KEY': ('Perplexity Sonar', False),  # Optional since it can use OPENAI_API_KEY
-    }
-    
+    """Check which API keys are configured.
+
+    Requirements for daily briefing:
+    - OPENAI_API_KEY (LLM analyzer/scoping)
+    - EXA_API_KEY (Exa search)
+    - SONAR_API_KEY or PERPLEXITY_API_KEY (Perplexity Sonar)
+    """
     configured = []
     missing = []
-    
-    for key, (desc, required) in keys.items():
-        value = os.getenv(key)
-        if value:
-            configured.append(f"{key} ({desc})")
-        elif required or (key == 'SONAR_API_KEY' and not os.getenv('OPENAI_API_KEY')):
-            missing.append(f"{key} ({desc})")
-    
+
+    # Required singles
+    if os.getenv('OPENAI_API_KEY'):
+        configured.append('OPENAI_API_KEY (OpenAI/LLM Analysis)')
+    else:
+        missing.append('OPENAI_API_KEY (OpenAI/LLM Analysis)')
+
+    if os.getenv('EXA_API_KEY'):
+        configured.append('EXA_API_KEY (Exa Search)')
+    else:
+        missing.append('EXA_API_KEY (Exa Search)')
+
+    # One-of pair for Perplexity Sonar
+    sonar = os.getenv('SONAR_API_KEY')
+    perplexity = os.getenv('PERPLEXITY_API_KEY')
+    if sonar or perplexity:
+        if sonar:
+            configured.append('SONAR_API_KEY (Perplexity Sonar)')
+        if perplexity:
+            configured.append('PERPLEXITY_API_KEY (Perplexity Sonar)')
+    else:
+        missing.append('SONAR_API_KEY or PERPLEXITY_API_KEY (Perplexity Sonar)')
+
     return configured, missing
 
 def check_tools():
