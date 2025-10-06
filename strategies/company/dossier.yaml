@@ -16,7 +16,6 @@ filters:
       - official
 quorum:
   min_sources: 3
-  require_official: true
 render:
   type: dossier
   sections:
@@ -24,4 +23,4 @@ render:
     - financials
     - news
 limits:
-  max_results: 10
+  max_results: 20

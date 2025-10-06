@@ -218,36 +218,19 @@ def _canonical_url(url: str) -> str:
 
 
 def _dedupe_and_score(evidence: List[Evidence], limit: int | None) -> List[Evidence]:
-    """Dedupe by canonical URL and apply simple scoring and budget."""
-    import math
-    deduped: Dict[str, Evidence] = {}
+    """Dedupe by canonical URL while preserving original order and applying the limit."""
+    deduped: List[Evidence] = []
+    seen: set[str] = set()
     for ev in evidence:
         key = _canonical_url(ev.url)
-        current = deduped.get(key)
-        if current is None or (ev.score or 0.0) > (current.score or 0.0):
-            deduped[key] = ev
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(ev)
 
-    # Apply recency decay and sort
-    today = datetime.utcnow().date()
-    scored: List[Evidence] = []
-    for ev in deduped.values():
-        recency = 1.0
-        if ev.date:
-            try:
-                dt = datetime.fromisoformat(ev.date.split("T")[0]).date()
-                days = max((today - dt).days, 0)
-                # Use logarithmic decay for better handling of weekly/monthly content
-                recency = 1 / (1 + math.log(1 + days / 7))
-            except Exception:
-                recency = 1.0
-        base = ev.score or 0.0
-        ev.score = base + recency
-        scored.append(ev)
-
-    scored.sort(key=lambda e: e.score or 0.0, reverse=True)
     if limit is not None:
-        scored = scored[:limit]
-    return scored
+        return deduped[:limit]
+    return deduped
 
 
 def _step_query_key(name: str) -> str | None:
@@ -1615,3 +1598,4 @@ def build_graph() -> StateGraph:
     builder.add_edge("qc", END)
 
     return builder.compile(checkpointer=MemorySaver())
+

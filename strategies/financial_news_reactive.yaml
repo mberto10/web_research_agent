@@ -69,7 +69,7 @@ finalize:
     - Data Sources
 
 limits:
-  max_results: 40
+  max_results: 20
   max_llm_queries: 2
 
 render:

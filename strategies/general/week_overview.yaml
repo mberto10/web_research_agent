@@ -21,4 +21,4 @@ render:
     - summary
     - key developments
 limits:
-  max_results: 7
+  max_results: 20

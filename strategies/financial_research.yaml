@@ -58,7 +58,7 @@ tool_chain:
       end_date: "{{end_date}}"
 
 limits:
-  max_results: 100
+  max_results: 20
   max_llm_queries: 3
 
 render:

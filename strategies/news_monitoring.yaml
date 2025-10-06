@@ -98,7 +98,7 @@ tool_chain:
       stream: false  # Complete answer
 
 limits:
-  max_results: 75
+  max_results: 20
   max_llm_queries: 2
 
 render:

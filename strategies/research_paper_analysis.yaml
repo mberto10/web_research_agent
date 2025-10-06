@@ -72,7 +72,7 @@ tool_chain:
       stream: false  # Get complete answer at once
 
 limits:
-  max_results: 100
+  max_results: 20
   max_llm_queries: 3
 
 render:

@@ -110,7 +110,7 @@ tool_chain:
     phase: finalize
 
 limits:
-  max_results: 100
+  max_results: 20
   max_llm_queries: 2
 
 finalize:

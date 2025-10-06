@@ -15,11 +15,10 @@ filters:
   recency: day
 quorum:
   min_sources: 3
-  require_official: true
 render:
   type: briefing
   sections:
     - top stories
     - analysis
 limits:
-  max_results: 5
+  max_results: 20
