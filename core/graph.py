@@ -988,6 +988,11 @@ def finalize(state: State) -> State:
         return state
 
     register_default_adapters(silent=True)
+
+    # Get evidence limit from strategy configuration
+    strategy = load_strategy(state.strategy_slug)
+    evidence_limit = strategy.limits.get("max_results") if strategy.limits else 100
+
     steps = [s for s in runtime_plan if (s.get("phase") or "research") == "finalize"]
     if not steps:
         # Heuristic: any step with 'when' and provider in {http, parse}
@@ -1002,7 +1007,7 @@ def finalize(state: State) -> State:
     # Format evidence as text for LLM consumption
     evidence_text = []
     evidence_full_text = []  # Full snippets for LLM analysis
-    for i, ev in enumerate(state.evidence[:50], 1):
+    for i, ev in enumerate(state.evidence[:evidence_limit], 1):
         text = f"{i}. "
         full_text = f"{i}. "
         if ev.title:
@@ -1078,7 +1083,10 @@ def finalize(state: State) -> State:
 def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, Any]) -> State:
     """ReAct implementation of finalize - can call tools then write report."""
     register_default_adapters(silent=True)
-    
+
+    # Get evidence limit from strategy configuration
+    evidence_limit = strategy.limits.get("max_results") if strategy.limits else 100
+
     def format_evidence_lines(
         items: List[Evidence],
         limit: int = 50,
@@ -1106,7 +1114,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
     if model == "gpt-5-mini":
         call_kwargs.pop("temperature", None)
 
-    evidence_lines = format_evidence_lines(state.evidence)
+    evidence_lines = format_evidence_lines(state.evidence, limit=evidence_limit)
     instructions = finalize_config.get("instructions", "")
     # Prefer topic provided by scope/fill, then first task, then user request
     topic_guess = (
@@ -1277,7 +1285,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
             # Now get the report with enhanced evidence
             updated_lines = format_evidence_lines(
                 state.evidence,
-                limit=40,
+                limit=evidence_limit,
                 skip_urls={"exa_answer_verification"},
             )
 

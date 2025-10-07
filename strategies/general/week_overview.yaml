@@ -16,9 +16,7 @@ filters:
 quorum:
   min_sources: 3
 render:
-  type: memo
-  sections:
-    - summary
-    - key developments
+  type: markdown
+  sections: []
 limits:
   max_results: 20

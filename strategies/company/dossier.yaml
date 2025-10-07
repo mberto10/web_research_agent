@@ -17,10 +17,7 @@ filters:
 quorum:
   min_sources: 3
 render:
-  type: dossier
-  sections:
-    - overview
-    - financials
-    - news
+  type: markdown
+  sections: []
 limits:
   max_results: 20

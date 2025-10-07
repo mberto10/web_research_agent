@@ -39,4 +39,5 @@ def test_graph_compiles(monkeypatch):
     assert result["time_window"] == "week"
     assert result["strategy_slug"] == "general/week_overview"
     assert result["tasks"] == ["economy", "politics"]
-    assert "summary" in result["summaries"]
+    # After removal of template renderers, sections contain markdown output
+    assert isinstance(result["sections"], list)

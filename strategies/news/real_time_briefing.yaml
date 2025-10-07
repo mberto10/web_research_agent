@@ -16,9 +16,7 @@ filters:
 quorum:
   min_sources: 3
 render:
-  type: briefing
-  sections:
-    - top stories
-    - analysis
+  type: markdown
+  sections: []
 limits:
   max_results: 20
