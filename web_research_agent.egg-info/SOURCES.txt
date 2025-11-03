@@ -1,5 +1,12 @@
 README.md
 pyproject.toml
+api/__init__.py
+api/crud.py
+api/database.py
+api/main.py
+api/models.py
+api/schemas.py
+api/webhooks.py
 core/__init__.py
 core/config.py
 core/debug_log.py

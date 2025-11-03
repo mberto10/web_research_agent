@@ -16,7 +16,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "verify-setup"
+args = "api-server"
 
 [[workflows.workflow]]
 name = "verify-setup"
@@ -29,9 +29,29 @@ args = "python verify_setup.py"
 [workflows.workflow.metadata]
 outputType = "console"
 
+[[workflows.workflow]]
+name = "api-server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python run_api.py"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
+
 [[ports]]
 localPort = 10246
 externalPort = 3001
+exposeLocalhost = true
+
+[[ports]]
+localPort = 17924
+externalPort = 3002
 exposeLocalhost = true
 
 [[ports]]
@@ -42,3 +62,8 @@ exposeLocalhost = true
 [[ports]]
 localPort = 60078
 externalPort = 80
+
+[deployment]
+build = ["sh", "-c", "pip install -e ."]
+run = ["sh", "-c", "python run_api.py"]
+deploymentTarget = "gce"
