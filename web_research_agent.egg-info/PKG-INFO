@@ -13,6 +13,9 @@ Requires-Dist: langfuse>=3.1.0
 Requires-Dist: exa-py>=2.0.0
 Requires-Dist: openai>=2.6.1
 Requires-Dist: python-dotenv>=1.2.1
+Requires-Dist: asyncpg>=0.30.0
+Requires-Dist: psycopg2-binary>=2.9.11
+Requires-Dist: sqlalchemy[asyncio]>=2.0.44
 Provides-Extra: exa
 Requires-Dist: exa-py; extra == "exa"
 Provides-Extra: sonar

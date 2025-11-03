@@ -6,6 +6,9 @@ langfuse>=3.1.0
 exa-py>=2.0.0
 openai>=2.6.1
 python-dotenv>=1.2.1
+asyncpg>=0.30.0
+psycopg2-binary>=2.9.11
+sqlalchemy[asyncio]>=2.0.44
 
 [all]
 exa-py
