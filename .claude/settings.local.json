@@ -16,7 +16,12 @@
       "Bash(dir:*)",
       "Bash(find:*)",
       "Bash(set DEBUG_LOG=true)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "mcp__linear-server__list_teams",
+      "mcp__linear-server__create_project",
+      "mcp__linear-server__update_project",
+      "mcp__linear-server__list_issues",
+      "mcp__linear-server__get_issue"
     ],
     "deny": [],
     "ask": []

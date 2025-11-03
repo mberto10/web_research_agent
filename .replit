@@ -28,3 +28,21 @@ args = "python verify_setup.py"
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[ports]]
+localPort = 10246
+externalPort = 3001
+exposeLocalhost = true
+
+[[ports]]
+localPort = 33818
+externalPort = 3000
+exposeLocalhost = true
+
+[[ports]]
+localPort = 58175
+externalPort = 3002
+
+[[ports]]
+localPort = 60078
+externalPort = 80
