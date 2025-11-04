@@ -1,8 +1,12 @@
 // Action #7: Webhook Receiver (Process Results)
 // Use Case: Receive research results from API and send via email
 
-// Webhook Data (from previous step/trigger)
-const webhookData = data.response; // Response from webhook trigger
+// Webhook Data (from webhook trigger)
+// Try different possible data locations depending on Langdock's structure
+const webhookData = data.response || data.input || data;
+
+// Log what we received for debugging
+console.log("Webhook data received:", JSON.stringify(webhookData, null, 2));
 
 // Extract variables
 const taskId = webhookData.task_id; // Unique task identifier
@@ -45,7 +49,7 @@ if (status === "failed") {
   return {
     to: email,
     subject: `Research briefing failed: ${researchTopic}`,
-    html: `
+    body: `
 <p>We encountered an error generating your research briefing.</p>
 <p><strong>Error:</strong> ${webhookData.error}</p>
 <p>Please contact support if this continues.</p>
