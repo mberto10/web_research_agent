@@ -305,7 +305,32 @@ async def run_batch_research(tasks: list, callback_url: str):
             config = {"configurable": {"thread_id": str(task.id)}}
             result = graph.invoke(State(user_request=task.research_topic), config)
             logger.info(f"  ✅ Research completed")
-            logger.info(f"  📊 Sections: {len(result.sections)}, Evidence: {len(result.evidence)}")
+
+            # Handle both dict and State object (LangGraph may return either)
+            sections = result.get("sections") if isinstance(result, dict) else result.sections
+            evidence = result.get("evidence", []) if isinstance(result, dict) else result.evidence
+
+            # Ensure sections and evidence are not None
+            sections = sections or []
+            evidence = evidence or []
+
+            logger.info(f"  📊 Sections: {len(sections)}, Evidence: {len(evidence)}")
+
+            # Format citations with safe attribute access
+            citations = []
+            for e in evidence[:10]:  # Top 10 citations
+                if isinstance(e, dict):
+                    citations.append({
+                        "title": e.get("title", "No title"),
+                        "url": e.get("url", ""),
+                        "snippet": e.get("snippet", "")
+                    })
+                else:
+                    citations.append({
+                        "title": getattr(e, "title", "No title"),
+                        "url": getattr(e, "url", ""),
+                        "snippet": getattr(e, "snippet", "")
+                    })
 
             # Format payload
             payload = {
@@ -315,17 +340,10 @@ async def run_batch_research(tasks: list, callback_url: str):
                 "frequency": task.frequency,
                 "status": "completed",
                 "result": {
-                    "sections": result.sections,
-                    "citations": [
-                        {
-                            "title": e.title,
-                            "url": e.url,
-                            "snippet": e.snippet
-                        }
-                        for e in result.evidence[:10]  # Top 10 citations
-                    ],
+                    "sections": sections,
+                    "citations": citations,
                     "metadata": {
-                        "evidence_count": len(result.evidence),
+                        "evidence_count": len(evidence),
                         "executed_at": datetime.utcnow().isoformat()
                     }
                 }
@@ -338,9 +356,14 @@ async def run_batch_research(tasks: list, callback_url: str):
             if success:
                 logger.info(f"  ✅ Webhook sent successfully")
                 # Update last_run_at timestamp
-                async for session in db_manager.get_session():
-                    await crud.mark_task_executed(session, task.id)
-                    logger.info(f"  ✅ Database updated (last_run_at)")
+                try:
+                    async for session in db_manager.get_session():
+                        await crud.mark_task_executed(session, task.id)
+                        logger.info(f"  ✅ Database updated (last_run_at)")
+                        break  # Only need one session
+                except Exception as db_error:
+                    logger.error(f"  ⚠️ Database update failed: {db_error}")
+                    # Don't fail the whole task if just the timestamp update fails
             else:
                 logger.error(f"  ❌ Webhook failed to send")
 

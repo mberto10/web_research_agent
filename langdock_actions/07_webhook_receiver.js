@@ -16,11 +16,25 @@ const status = webhookData.status; // "completed" or "failed"
 
 // Success - Format email content
 if (status === "completed") {
-  const result = webhookData.result;
-  const sections = result.sections.join("\n\n"); // Research content sections
-  const citations = result.citations.map((c, i) => // List of sources
-    `${i + 1}. ${c.title}\n   ${c.url}`
-  ).join("\n");
+  const result = webhookData.result || {};
+
+  // Safely handle sections
+  const sectionsArray = result.sections || [];
+  const sections = sectionsArray.length > 0
+    ? sectionsArray.join("\n\n")
+    : "No research content available.";
+
+  // Safely handle citations
+  const citationsArray = result.citations || [];
+  const citations = citationsArray.length > 0
+    ? citationsArray.map((c, i) =>
+        `${i + 1}. ${c.title || "No title"}\n   ${c.url || ""}`
+      ).join("\n")
+    : "No citations available.";
+
+  // Safely get metadata
+  const metadata = result.metadata || {};
+  const executedAt = metadata.executed_at || new Date().toISOString();
 
   // Format email HTML
   const emailSubject = `Your ${researchTopic} briefing is ready`;
@@ -33,7 +47,7 @@ if (status === "completed") {
 <h3>Sources</h3>
 <pre>${citations}</pre>
 
-<p><small>Research completed at ${result.metadata.executed_at}</small></p>
+<p><small>Research completed at ${executedAt}</small></p>
   `;
 
   // Return email configuration for Outlook action
