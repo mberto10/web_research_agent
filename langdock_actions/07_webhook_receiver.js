@@ -3,7 +3,8 @@
 
 // Webhook Data (from webhook trigger)
 // Try different possible data locations depending on Langdock's structure
-const webhookData = data.response || data.input || data;
+// Langdock webhook triggers nest the payload under data.body
+const webhookData = data.body || data.response || data.input || data;
 
 // Log what we received for debugging
 console.log("Webhook data received:", JSON.stringify(webhookData, null, 2));

@@ -264,6 +264,7 @@ async def run_batch_research(tasks: list, callback_url: str):
         from core.graph import build_graph
         from core.state import State
         from tools import register_default_adapters
+        from core.langfuse_tracing import workflow_span, flush_traces
         logger.info("✅ Imports successful")
 
         # Initialize research tools once
@@ -300,10 +301,36 @@ async def run_batch_research(tasks: list, callback_url: str):
         logger.info(f"  Topic: {task.research_topic}")
 
         try:
-            # Execute research with thread_id for checkpointer
+            # Execute research with unified tracing under a single parent trace
             logger.info(f"  🚀 Invoking research graph...")
-            config = {"configurable": {"thread_id": str(task.id)}}
-            result = graph.invoke(State(user_request=task.research_topic), config)
+
+            # Create parent trace for entire research workflow
+            with workflow_span(
+                name=f"Research Task: {task.research_topic[:50]}...",
+                trace_input={
+                    "task_id": str(task.id),
+                    "email": task.email,
+                    "research_topic": task.research_topic,
+                    "frequency": task.frequency
+                },
+                user_id=task.email,
+                session_id=str(task.id),
+                tags=["api", "batch_execution", task.frequency],
+                metadata={
+                    "task_id": str(task.id),
+                    "frequency": task.frequency,
+                    "callback_url": callback_url
+                }
+            ) as trace_ctx:
+                config = {"configurable": {"thread_id": str(task.id)}}
+                result = graph.invoke(State(user_request=task.research_topic), config)
+
+                # Update trace with successful completion
+                trace_ctx.update_trace(
+                    output={"status": "completed"},
+                    metadata={"stage": "research_completed"}
+                )
+
             logger.info(f"  ✅ Research completed")
 
             # Handle both dict and State object (LangGraph may return either)
@@ -387,6 +414,13 @@ async def run_batch_research(tasks: list, callback_url: str):
     logger.info(f"\n{'='*60}")
     logger.info(f"✅ BATCH EXECUTION COMPLETE: {len(tasks)} tasks processed")
     logger.info(f"{'='*60}\n")
+
+    # Flush all traces to Langfuse
+    try:
+        flush_traces()
+        logger.info("📊 Traces flushed to Langfuse")
+    except Exception as flush_error:
+        logger.warning(f"⚠️ Failed to flush traces: {flush_error}")
 
 
 # --- Optional: Parallel Execution (Future Enhancement) ---

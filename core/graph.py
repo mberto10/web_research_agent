@@ -741,7 +741,8 @@ def _qc_llm(sections: List[str], citations: List[str], model: str | None = None,
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return {}
+        logger.warning("⚠️ QC_LLM: OPENAI_API_KEY not set, skipping LLM grounding check")
+        return {"grounded": True, "warnings": [], "inconsistencies": []}
 
     client = OpenAI(api_key=api_key)
     model = model or os.getenv("QC_MODEL", "gpt-4o-mini")
@@ -752,6 +753,7 @@ def _qc_llm(sections: List[str], citations: List[str], model: str | None = None,
         "and 'inconsistencies' (list of strings)."
     )
     user = f"Sections:\n{chr(10).join(sections)}\n\nCitations:\n{chr(10).join(citations)}"
+    logger.info(f"🔍 QC_LLM: Calling {model} with {len(user)} chars input")
     if lf_client:
         lf_client.update_current_generation(
             model=model,
@@ -788,9 +790,18 @@ def _qc_llm(sections: List[str], citations: List[str], model: str | None = None,
                 output=content,
                 usage_details=usage_details,
             )
+        logger.info(f"✅ QC_LLM: Received {len(content)} chars response, parsing JSON...")
         return json.loads(content)
-    except Exception:
-        return {}
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ QC_LLM: JSON parsing failed: {e}")
+        logger.error(f"Response was: {content[:500] if 'content' in locals() else 'No response'}...")
+        return {"grounded": True, "warnings": [f"QC parsing failed: {str(e)}"], "inconsistencies": []}
+    except Exception as e:
+        logger.error(f"❌ QC_LLM: Failed with error: {e}")
+        logger.error(f"Input size: {len(user) if 'user' in locals() else 0} chars")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {"grounded": True, "warnings": [f"QC check failed: {str(e)}"], "inconsistencies": []}
 
 
 def qc(state: State) -> State:
@@ -852,9 +863,11 @@ def qc(state: State) -> State:
 
     # LLM grounding check ------------------------------------------------
     if state.sections and state.citations:
+        logger.info(f"🔍 QC: Running LLM grounding check on {len(state.sections)} sections and {len(state.citations)} citations")
         llm_cfg = get_llm_config("qc", state.strategy_slug)
         system = get_prompt("qc", state.strategy_slug)
         result = _qc_llm(state.sections, state.citations, model=llm_cfg.get("model"), system=system)
+        logger.info(f"✅ QC: LLM check complete. Grounded: {result.get('grounded', True)}, Warnings: {len(result.get('warnings', []))}, Inconsistencies: {len(result.get('inconsistencies', []))}")
         warnings = result.get("warnings") or []
         if warnings:
             state.limitations.extend(warnings)
@@ -1325,6 +1338,11 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
             )
 
             report_content = final_response.choices[0].message.content
+
+            # DEBUG: Log report before parsing
+            logger.info(f"📄 FINALIZE: Generated report ({len(report_content)} chars)")
+            logger.info(f"Preview: {report_content[:500]}...")
+
             if lf_client:
                 usage = getattr(final_response, "usage", None)
                 usage_details = None
@@ -1396,7 +1414,31 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
         else:
             # If no sections found, add as single section
             state.sections.append(report_content)
-            
+
+        # DEDUPLICATION: Remove duplicate sections
+        if len(state.sections) > 1:
+            unique_sections = []
+            seen = set()
+
+            for section in state.sections:
+                # Use first 200 chars as fingerprint
+                fingerprint = section[:200].strip()
+                if fingerprint not in seen:
+                    unique_sections.append(section)
+                    seen.add(fingerprint)
+                else:
+                    logger.warning(f"⚠️ FINALIZE: Removed duplicate section")
+
+            if len(unique_sections) != len(state.sections):
+                logger.info(f"📝 FINALIZE: Deduplication: {len(state.sections)} → {len(unique_sections)} sections")
+                state.sections = unique_sections
+
+        # DEBUG: Log parsed sections
+        logger.info(f"📝 FINALIZE: Parsed into {len(state.sections)} sections:")
+        for i, section in enumerate(state.sections):
+            preview = section[:150].replace('\n', ' ')
+            logger.info(f"  Section {i+1}: {len(section)} chars - {preview}...")
+
     except Exception as e:
         # Fallback to original behavior if ReAct fails
         import traceback
