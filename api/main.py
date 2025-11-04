@@ -300,9 +300,10 @@ async def run_batch_research(tasks: list, callback_url: str):
         logger.info(f"  Topic: {task.research_topic}")
 
         try:
-            # Execute research
+            # Execute research with thread_id for checkpointer
             logger.info(f"  🚀 Invoking research graph...")
-            result = graph.invoke(State(user_request=task.research_topic))
+            config = {"configurable": {"thread_id": str(task.id)}}
+            result = graph.invoke(State(user_request=task.research_topic), config)
             logger.info(f"  ✅ Research completed")
             logger.info(f"  📊 Sections: {len(result.sections)}, Evidence: {len(result.evidence)}")
 
