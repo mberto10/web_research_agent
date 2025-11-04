@@ -7,11 +7,11 @@ Copy-paste ready JavaScript functions for Langdock workflows. Just change the `b
 ## Configuration
 
 ```javascript
-// 🔧 CHANGE THIS WHEN DEPLOYING TO PRODUCTION
-const baseUrl = "https://your-repl-name.your-username.repl.co"; // Development
-// const baseUrl = "https://your-production-url.repl.co"; // Production (Reserved VM)
+// 🔧 Production Configuration
+const baseUrl = "https://webresearchagent.replit.app"; // Your Replit Reserved VM URL
 
-const apiKey = data.auth.apiKey; // Your API secret key from Replit Secrets
+const apiKey = data.auth.apiKey; // Your API secret key (store in Langdock Secrets)
+// Production key: 60b8a838a2cecf8d40f641e51ff96ab5c813b0c768b4a3b9cae2cb19fc00271b
 ```
 
 ---
@@ -22,7 +22,7 @@ const apiKey = data.auth.apiKey; // Your API secret key from Replit Secrets
 
 ```javascript
 // 🔧 Configuration
-const baseUrl = "https://your-repl-name.your-username.repl.co";
+const baseUrl = "https://webresearchagent.replit.app";
 const apiKey = data.auth.apiKey; // Your API secret key
 
 // 📥 Input Variables
@@ -31,8 +31,8 @@ const researchTopic = data.input.researchTopic; // What to research (e.g., "AI d
 const frequency = data.input.frequency; // How often to run: "daily", "weekly", or "monthly"
 const scheduleTime = data.input.scheduleTime || "09:00"; // Time of day to run (24h format)
 
-// 📤 Return fetch configuration for Langdock
-return {
+// 📤 Execute API request
+const options = {
   url: `${baseUrl}/tasks`,
   method: 'POST',
   headers: {
@@ -46,6 +46,9 @@ return {
     schedule_time: scheduleTime
   }
 };
+
+const response = await ld.request(options);
+return response.json;
 ```
 
 **Variables:**
@@ -63,20 +66,23 @@ return {
 
 ```javascript
 // 🔧 Configuration
-const baseUrl = "https://your-repl-name.your-username.repl.co";
+const baseUrl = "https://webresearchagent.replit.app";
 const apiKey = data.auth.apiKey; // Your API secret key
 
 // 📥 Input Variables
 const email = data.input.email; // Email address to look up
 
-// 📤 Return fetch configuration
-return {
+// 📤 Execute API request
+const options = {
   url: `${baseUrl}/tasks?email=${encodeURIComponent(email)}`,
   method: 'GET',
   headers: {
     'X-API-Key': apiKey
   }
 };
+
+const response = await ld.request(options);
+return response.json;
 ```
 
 **Variables:**
@@ -91,7 +97,7 @@ return {
 
 ```javascript
 // 🔧 Configuration
-const baseUrl = "https://your-repl-name.your-username.repl.co";
+const baseUrl = "https://webresearchagent.replit.app";
 const apiKey = data.auth.apiKey; // Your API secret key
 
 // 📥 Input Variables
@@ -106,8 +112,8 @@ if (researchTopic !== undefined) updates.research_topic = researchTopic;
 if (frequency !== undefined) updates.frequency = frequency;
 if (isActive !== undefined) updates.is_active = isActive;
 
-// 📤 Return fetch configuration
-return {
+// 📤 Execute API request
+const options = {
   url: `${baseUrl}/tasks/${taskId}`,
   method: 'PATCH',
   headers: {
@@ -116,6 +122,9 @@ return {
   },
   body: updates
 };
+
+const response = await ld.request(options);
+return response.json;
 ```
 
 **Variables:**
@@ -133,20 +142,23 @@ return {
 
 ```javascript
 // 🔧 Configuration
-const baseUrl = "https://your-repl-name.your-username.repl.co";
+const baseUrl = "https://webresearchagent.replit.app";
 const apiKey = data.auth.apiKey; // Your API secret key
 
 // 📥 Input Variables
 const taskId = data.input.taskId; // UUID of task to delete
 
-// 📤 Return fetch configuration
-return {
+// 📤 Execute API request
+const options = {
   url: `${baseUrl}/tasks/${taskId}`,
   method: 'DELETE',
   headers: {
     'X-API-Key': apiKey
   }
 };
+
+const response = await ld.request(options);
+return response.json;
 ```
 
 **Variables:**
@@ -161,15 +173,15 @@ return {
 
 ```javascript
 // 🔧 Configuration
-const baseUrl = "https://your-repl-name.your-username.repl.co";
+const baseUrl = "https://webresearchagent.replit.app";
 const apiKey = data.auth.apiKey; // Your API secret key
 
 // 📥 Input Variables
 const frequency = data.input.frequency; // Which frequency to execute: "daily", "weekly", or "monthly"
 const callbackUrl = data.input.callbackUrl; // Webhook URL to receive research results
 
-// 📤 Return fetch configuration
-return {
+// 📤 Execute API request
+const options = {
   url: `${baseUrl}/execute/batch`,
   method: 'POST',
   headers: {
@@ -181,6 +193,9 @@ return {
     callback_url: callbackUrl
   }
 };
+
+const response = await ld.request(options);
+return response.json;
 ```
 
 **Variables:**
@@ -222,13 +237,16 @@ Each condition uses the "Execute Batch" action (#5) with different frequency val
 
 ```javascript
 // 🔧 Configuration
-const baseUrl = "https://your-repl-name.your-username.repl.co";
+const baseUrl = "https://webresearchagent.replit.app";
 
-// 📤 Return fetch configuration (no auth needed for health)
-return {
+// 📤 Execute API request (no auth needed for health)
+const options = {
   url: `${baseUrl}/health`,
   method: 'GET'
 };
+
+const response = await ld.request(options);
+return response.json;
 ```
 
 **Variables:** None required
@@ -271,11 +289,11 @@ if (status === "completed") {
 <p><small>Research completed at ${result.metadata.executed_at}</small></p>
   `;
 
-  // Return email configuration for Resend
+  // Return email configuration for Outlook action
   return {
     to: email,
     subject: emailSubject,
-    html: emailBody
+    body: emailBody
   };
 }
 
@@ -385,13 +403,16 @@ Authentication: None
 
 ### Webhook Receiver + Email Action
 ```
-Action Type: Code (then chain to Resend Email action)
+Action Type: Code (then chain to Outlook Send Email action)
 
 Input Fields:
   - (auto) - Data comes from webhook trigger
 
-Next Action: Send Email (Resend)
-  - Use output from webhook receiver code
+Next Action: Send Email (Outlook)
+  - To: {output.to}
+  - Subject: {output.subject}
+  - Body: {output.body}
+  - Body Type: HTML
 ```
 
 ---
@@ -406,9 +427,9 @@ Next Action: Send Email (Resend)
 6. ✅ Update `baseUrl` in all Langdock actions
 7. ✅ Add `apiKey` to Langdock authentication
 8. ✅ Test each action individually
-9. ✅ Set up webhook receiver workflow
-10. ✅ Configure Resend email action
-11. ✅ Test end-to-end flow
+9. ⏳ Set up webhook receiver workflow
+10. ⏳ Configure Outlook email action
+11. ⏳ Test end-to-end flow
 
 ---
 
@@ -443,10 +464,11 @@ Action 1: Process Webhook Data (#9)
     - Parses result
     - Formats email
     ↓
-Action 2: Send Email (Resend)
+Action 2: Send Email (Outlook)
     - To: {output.to}
     - Subject: {output.subject}
-    - HTML: {output.html}
+    - Body: {output.body}
+    - Body Type: HTML
 ```
 
 ---
@@ -454,7 +476,12 @@ Action 2: Send Email (Resend)
 ## Troubleshooting
 
 **Error: "Invalid response format"**
-- ✅ Fixed! Use the return format above: `{url, method, headers, body}`
+- ✅ Fixed! Use Langdock's `ld.request()` pattern:
+  ```javascript
+  const options = {url, method, headers, body};
+  const response = await ld.request(options);
+  return response.json;
+  ```
 
 **Error: "401 Unauthorized"**
 - Check API key is set in Langdock authentication

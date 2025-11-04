@@ -1,7 +1,10 @@
 """Webhook sender with retry logic."""
 import httpx
 import asyncio
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 async def send_webhook(
@@ -19,26 +22,41 @@ async def send_webhook(
     Returns:
         True if successful, False if all retries failed
     """
+    task_id = payload.get('task_id', 'unknown')
+    logger.info(f"📤 Sending webhook for task {task_id}")
+    logger.info(f"   URL: {url}")
+    logger.info(f"   Payload size: {len(str(payload))} chars")
 
     for attempt in range(max_retries):
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
+                logger.info(f"   Attempt {attempt + 1}/{max_retries}...")
                 response = await client.post(url, json=payload)
+                logger.info(f"   Response status: {response.status_code}")
+                logger.info(f"   Response body: {response.text[:200]}")
                 response.raise_for_status()
-                print(f"✓ Webhook delivered: {payload.get('task_id', 'unknown')}")
+                logger.info(f"✅ Webhook delivered successfully for task {task_id}")
                 return True
 
-        except Exception as e:
+        except httpx.HTTPStatusError as e:
+            logger.error(f"❌ HTTP error: {e.response.status_code}")
+            logger.error(f"   Response: {e.response.text[:200]}")
             if attempt == max_retries - 1:
-                # Final attempt failed
-                print(f"❌ Webhook failed after {max_retries} attempts: {e}")
-                print(f"   URL: {url}")
-                print(f"   Task: {payload.get('task_id', 'unknown')}")
+                logger.error(f"❌ Webhook failed after {max_retries} attempts")
                 return False
-
-            # Exponential backoff: 2s, 4s, 8s
             wait_time = 2 ** (attempt + 1)
-            print(f"⚠ Webhook attempt {attempt + 1} failed, retrying in {wait_time}s...")
+            logger.warning(f"⚠️ Retrying in {wait_time}s...")
+            await asyncio.sleep(wait_time)
+
+        except Exception as e:
+            logger.error(f"❌ Webhook error: {type(e).__name__}: {e}")
+            if attempt == max_retries - 1:
+                logger.error(f"❌ Webhook failed after {max_retries} attempts")
+                logger.error(f"   URL: {url}")
+                logger.error(f"   Task: {task_id}")
+                return False
+            wait_time = 2 ** (attempt + 1)
+            logger.warning(f"⚠️ Retrying in {wait_time}s...")
             await asyncio.sleep(wait_time)
 
     return False

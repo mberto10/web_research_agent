@@ -24,7 +24,8 @@
       "mcp__linear-server__get_issue",
       "mcp__linear-server__update_issue",
       "mcp__linear-server__create_comment",
-      "WebFetch(domain:docs.replit.com)"
+      "WebFetch(domain:docs.replit.com)",
+      "mcp__linear-server__create_issue"
     ],
     "deny": [],
     "ask": []

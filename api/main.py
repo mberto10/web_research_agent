@@ -4,10 +4,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from uuid import UUID
 import os
+import logging
+import sys
 
 from api.database import get_db, db_manager
 from api import schemas, crud
 from api.webhooks import send_webhook
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Research Agent API",
@@ -18,6 +28,22 @@ app = FastAPI(
 # --- Authentication ---
 
 API_KEY = os.getenv("API_SECRET_KEY", "dev-key-change-in-prod")
+logger.info(f"🔑 API Key loaded: {API_KEY[:8]}... (length: {len(API_KEY)})")
+
+# Check critical environment variables
+REQUIRED_ENV_VARS = [
+    "DATABASE_URL",
+    "PERPLEXITY_API_KEY",
+    "EXA_API_KEY",
+    "OPENAI_API_KEY"
+]
+
+for var in REQUIRED_ENV_VARS:
+    value = os.getenv(var)
+    if value:
+        logger.info(f"✅ {var}: {value[:8]}... (length: {len(value)})")
+    else:
+        logger.warning(f"⚠️ {var}: NOT SET")
 
 
 async def verify_api_key(x_api_key: str = Header(...)):
@@ -178,11 +204,15 @@ async def execute_batch(
     Returns:
         Execution status with task count
     """
+    logger.info(f"📥 Batch execution request received: frequency={request.frequency}")
+    logger.info(f"📞 Callback URL: {request.callback_url}")
 
     # Get all active tasks for this frequency
     tasks = await crud.get_tasks_by_frequency(db, request.frequency)
+    logger.info(f"🔍 Found {len(tasks)} tasks for frequency '{request.frequency}'")
 
     if not tasks:
+        logger.warning(f"⚠️ No tasks found for frequency '{request.frequency}'")
         return schemas.BatchExecuteResponse(
             status="completed",
             frequency=request.frequency,
@@ -190,7 +220,12 @@ async def execute_batch(
             started_at=datetime.utcnow().isoformat()
         )
 
+    # Log task details
+    for task in tasks:
+        logger.info(f"  - Task {task.id}: {task.email} - {task.research_topic}")
+
     # Start background execution
+    logger.info(f"🚀 Starting background execution for {len(tasks)} tasks")
     background_tasks.add_task(
         run_batch_research,
         tasks,
@@ -220,24 +255,56 @@ async def run_batch_research(tasks: list, callback_url: str):
         tasks: List of ResearchTask objects
         callback_url: Langdock webhook URL
     """
-    from core.graph import build_graph
-    from core.state import State
-    from tools import register_default_adapters
+    logger.info(f"\n{'='*60}")
+    logger.info(f"🎯 BACKGROUND TASK STARTED: Processing {len(tasks)} tasks")
+    logger.info(f"{'='*60}\n")
 
-    # Initialize research tools once
-    register_default_adapters()
-    graph = build_graph()
+    try:
+        logger.info("📦 Importing research modules...")
+        from core.graph import build_graph
+        from core.state import State
+        from tools import register_default_adapters
+        logger.info("✅ Imports successful")
 
-    print(f"\n{'='*60}")
-    print(f"Starting batch execution for {len(tasks)} tasks")
-    print(f"{'='*60}\n")
+        # Initialize research tools once
+        logger.info("🔧 Registering default adapters...")
+        register_default_adapters()
+        logger.info("✅ Adapters registered")
 
+        logger.info("🏗️ Building research graph...")
+        graph = build_graph()
+        logger.info("✅ Graph built successfully")
+
+    except Exception as e:
+        logger.error(f"❌ FATAL: Failed to initialize research environment: {e}")
+        logger.exception("Full traceback:")
+
+        # Send error webhook for all tasks
+        for task in tasks:
+            error_payload = {
+                "task_id": str(task.id),
+                "email": task.email,
+                "research_topic": task.research_topic,
+                "frequency": task.frequency,
+                "status": "failed",
+                "error": f"Failed to initialize research environment: {str(e)}",
+                "executed_at": datetime.utcnow().isoformat()
+            }
+            await send_webhook(callback_url, error_payload)
+        return
+
+    # Process each task
     for idx, task in enumerate(tasks, 1):
-        print(f"[{idx}/{len(tasks)}] Processing: {task.email} - {task.research_topic}")
+        logger.info(f"\n[{idx}/{len(tasks)}] 🔬 Processing task {task.id}")
+        logger.info(f"  Email: {task.email}")
+        logger.info(f"  Topic: {task.research_topic}")
 
         try:
             # Execute research
+            logger.info(f"  🚀 Invoking research graph...")
             result = graph.invoke(State(user_request=task.research_topic))
+            logger.info(f"  ✅ Research completed")
+            logger.info(f"  📊 Sections: {len(result.sections)}, Evidence: {len(result.evidence)}")
 
             # Format payload
             payload = {
@@ -264,15 +331,21 @@ async def run_batch_research(tasks: list, callback_url: str):
             }
 
             # Send webhook
+            logger.info(f"  📤 Sending webhook to: {callback_url}")
             success = await send_webhook(callback_url, payload)
 
             if success:
+                logger.info(f"  ✅ Webhook sent successfully")
                 # Update last_run_at timestamp
                 async for session in db_manager.get_session():
                     await crud.mark_task_executed(session, task.id)
+                    logger.info(f"  ✅ Database updated (last_run_at)")
+            else:
+                logger.error(f"  ❌ Webhook failed to send")
 
         except Exception as e:
-            print(f"❌ Error processing task {task.id}: {e}")
+            logger.error(f"  ❌ Error processing task {task.id}: {e}")
+            logger.exception("  Full traceback:")
 
             # Send error webhook for this task
             error_payload = {
@@ -284,11 +357,12 @@ async def run_batch_research(tasks: list, callback_url: str):
                 "error": str(e),
                 "executed_at": datetime.utcnow().isoformat()
             }
+            logger.info(f"  📤 Sending error webhook...")
             await send_webhook(callback_url, error_payload)
 
-    print(f"\n{'='*60}")
-    print(f"Batch execution complete: {len(tasks)} tasks processed")
-    print(f"{'='*60}\n")
+    logger.info(f"\n{'='*60}")
+    logger.info(f"✅ BATCH EXECUTION COMPLETE: {len(tasks)} tasks processed")
+    logger.info(f"{'='*60}\n")
 
 
 # --- Optional: Parallel Execution (Future Enhancement) ---

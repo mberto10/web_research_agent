@@ -60,8 +60,17 @@ externalPort = 3000
 exposeLocalhost = true
 
 [[ports]]
+localPort = 49480
+externalPort = 3003
+exposeLocalhost = true
+
+[[ports]]
 localPort = 60078
 externalPort = 80
+
+[[ports]]
+localPort = 64027
+externalPort = 4200
 
 [deployment]
 build = ["sh", "-c", "pip install -e ."]
