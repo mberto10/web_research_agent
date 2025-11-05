@@ -1047,11 +1047,13 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
             tool_call = message.tool_calls[0]
             function_name = tool_call.function.name
             arguments = json.loads(tool_call.function.arguments)
+            dbg.event("finalize.react.tool_choice", function=function_name, arguments=arguments)
 
             # Execute only the first tool call
             try:
                 if function_name == "exa_answer":
                     tool = get_tool("exa")
+                    dbg.tool_call("exa", "answer", {"query": arguments.get("query")})
                     result = tool.answer(arguments["query"])
                     # Add result as evidence
                     state.evidence.append(Evidence(
@@ -1065,12 +1067,14 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                 elif function_name == "exa_search":
                     tool = get_tool("exa")
                     params = {k: v for k, v in arguments.items() if k != "query"}
+                    dbg.tool_call("exa", "search", {"query": arguments.get("query"), **params})
                     results = tool.search(arguments["query"], **params)
                     state.evidence.extend(results)
 
                 elif function_name == "sonar_call":
                     tool = get_tool("sonar")
                     params = {k: v for k, v in arguments.items() if k != "prompt"}
+                    dbg.tool_call("sonar", "call", {"prompt": arguments.get("prompt"), **params})
                     results = tool.call(arguments["prompt"], **params)
                     state.evidence.extend(results)
             except Exception:
@@ -1107,6 +1111,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                 evidence_text="\n".join(updated_lines),
                 sections_prompt=sections_prompt,
             )
+            dbg.prompt("finalize.react.writer", writer_prompt, model=model)
 
             if lf_client:
                 lf_client.update_current_generation(
@@ -1152,6 +1157,7 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                 report_start = report_content.find("## ")
                 if report_start > 0:
                     report_content = report_content[report_start:]
+        dbg.event("finalize.react.report", length=len(report_content or ""))
         
         # Try to extract citations from a '## Sources' section
         try:
@@ -1183,6 +1189,10 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                         if c not in existing:
                             state.citations.append(c)
                             existing.add(c)
+                    try:
+                        dbg.event("finalize.react.citations", count=len(parsed), sample=parsed[:5])
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -1255,6 +1265,12 @@ def _execute_use(use: str, inputs: Dict[str, Any]) -> Any:
         logger.error("Adapter '%s' has no callable for method '%s'", provider, method)
         return []
     try:
+        # Log generic tool call (may duplicate higher-level logs, acceptable in debug)
+        try:
+            dbg.tool_call(provider, method, inputs if isinstance(inputs, dict) else {"arg": inputs})
+        except Exception:
+            pass
+        
         start_time = time.time()
         result = fn(**inputs) if isinstance(inputs, dict) else fn(inputs)
         duration = time.time() - start_time
@@ -1346,6 +1362,10 @@ def _llm_fill_inputs_simple(description: str, allowed: Dict[str, Any], model: st
         + f"Task: {description or 'fill search query parameters'}\n"
         + "Respond as a JSON object."
     )
+    try:
+        dbg.prompt("fill.llm", instructions, model=model or "gpt-4o-mini")
+    except Exception:
+        pass
     if lf_client:
         lf_client.update_current_generation(
             model=model or "gpt-4o-mini",
@@ -1382,6 +1402,10 @@ def _llm_fill_inputs_simple(description: str, allowed: Dict[str, Any], model: st
         import json as _json
 
         data = _json.loads(content)
+        try:
+            dbg.event("fill.llm.result", filled_keys=list(data.keys()) if isinstance(data, dict) else [])
+        except Exception:
+            pass
         if isinstance(data, dict):
             return {k: str(v) if not isinstance(v, str) else v for k, v in data.items() if k in allowed}
     except Exception:

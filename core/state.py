@@ -38,8 +38,6 @@ class WriteState(BaseModel):
     """State fields for the write phase."""
     sections: Annotated[List[str], operator.add] = Field(default_factory=list)
     citations: Annotated[List[str], operator.add] = Field(default_factory=list)
-    limitations: List[str] = Field(default_factory=list)
-    errors: List[str] = Field(default_factory=list)
     # Runtime vars and counters
     vars: dict = Field(default_factory=dict)
 

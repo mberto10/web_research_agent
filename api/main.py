@@ -336,6 +336,7 @@ async def run_batch_research(tasks: list, callback_url: str):
             # Handle both dict and State object (LangGraph may return either)
             sections = result.get("sections") if isinstance(result, dict) else result.sections
             evidence = result.get("evidence", []) if isinstance(result, dict) else result.evidence
+            strategy_slug = result.get("strategy_slug") if isinstance(result, dict) else getattr(result, "strategy_slug", None)
 
             # Ensure sections and evidence are not None
             sections = sections or []
@@ -371,7 +372,8 @@ async def run_batch_research(tasks: list, callback_url: str):
                     "citations": citations,
                     "metadata": {
                         "evidence_count": len(evidence),
-                        "executed_at": datetime.utcnow().isoformat()
+                        "executed_at": datetime.utcnow().isoformat(),
+                        "strategy_slug": strategy_slug
                     }
                 }
             }

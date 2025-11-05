@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import Any, Dict, List, Optional
@@ -9,6 +10,8 @@ from core.config import get_node_llm_config, get_node_prompt
 from core.langfuse_tracing import get_langfuse_client, observe
 from core.debug_log import dbg
 from strategies import StrategyIndexEntry, load_strategy_index
+
+logger = logging.getLogger(__name__)
 
 
 _LLM_CACHE: Dict[str, Dict[str, Any]] = {}
@@ -234,22 +237,29 @@ def _heuristic_scope(request: str, max_tasks: int) -> Dict[str, Any]:
     }
 
 
-@observe(as_type="generation", name="scope-classifier")
 def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
-    """Try to use an LLM to scope a request. Returns None on failure."""
+    """Try to use an LLM to scope a request. Returns None on failure.
+
+    NOTE: This is an internal implementation function. Tracing happens at the
+    categorize_request() level to avoid duplicate traces and handle caching properly.
+    """
     if request in _LLM_CACHE:
+        logger.info(f"🔄 SCOPE: Using cached result for request: {request[:50]}...")
         return _LLM_CACHE[request]
     try:  # Import inside the function so the dependency is optional.
         from openai import OpenAI  # type: ignore
     except Exception:
+        logger.warning("⚠️ SCOPE: OpenAI import failed, using heuristic fallback")
         return None
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
+        logger.warning("⚠️ SCOPE: No OPENAI_API_KEY set, using heuristic fallback")
         return None
 
     entries = _active_strategies()
     if not entries:
+        logger.warning("⚠️ SCOPE: No active strategies found")
         return None
 
     node_cfg = get_node_llm_config("scope_classifier")
@@ -259,10 +269,12 @@ def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
 
     prompt_template = _scope_prompt_template()
     if not prompt_template:
+        logger.warning("⚠️ SCOPE: No prompt template configured")
         return None
 
     prompt = _format_scope_prompt(prompt_template, request, entries)
     if not prompt:
+        logger.warning("⚠️ SCOPE: Prompt formatting failed")
         return None
     try:
         model = get_node_llm_config("scope_classifier").get("model", "gpt-4o-mini")
@@ -325,15 +337,10 @@ def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
                     "output_tokens": getattr(usage, "completion_tokens", None) or getattr(usage, "completionTokens", None),
                     "total_tokens": getattr(usage, "total_tokens", None) or getattr(usage, "totalTokens", None),
                 }
+            # Second update: Add output and usage (input already set above)
             lf_client.update_current_generation(
-                model=model,
-                input={
-                    "request": request,
-                    "strategies": [entry.model_dump() for entry in entries],
-                },
                 output=data,
                 usage_details=usage_details,
-                metadata={"component": "scope_classifier"},
             )
 
         slug = data.get("strategy_slug")
@@ -375,65 +382,136 @@ def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
         result["variables"] = variables
         _LLM_CACHE[request] = result
         return result
-    except Exception:
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ SCOPE: Failed to parse LLM response as JSON: {e}")
+        logger.error(f"Raw response: {raw_args[:500] if 'raw_args' in locals() else 'Not available'}...")
         return None
-    return None
+    except Exception as e:
+        logger.error(f"❌ SCOPE: Categorization failed with error: {e}")
+        logger.exception("Full traceback:")
+        return None
 
 
 def categorize_request(request: str) -> Dict[str, Any]:
-    """Return category, time window, and depth for a request."""
-    llm = _llm_scope(request)
-    if llm:
-        return {
-            "category": llm.get("category", "general"),
-            "time_window": llm.get("time_window", "week"),
-            "depth": llm.get("depth", "overview"),
-            "strategy_slug": llm.get("strategy_slug"),
-            "variables": llm.get("variables", {}),
-        }
+    """Return category, time window, depth, strategy, and variables for a request.
 
-    fallback = _heuristic_scope(request, DEFAULT_MAX_TASKS)
+    DEPRECATED: Consider using scope_request() for complete scoping.
+    This function is maintained for backward compatibility but internally
+    calls scope_request() and extracts only categorization fields (excluding tasks).
+
+    Returns a subset of scope_request() output with only:
+    - category, time_window, depth, strategy_slug, variables
+    """
+    result = scope_request(request)
     return {
-        "category": fallback["category"],
-        "time_window": fallback["time_window"],
-        "depth": fallback["depth"],
-        "strategy_slug": fallback.get("strategy_slug"),
-        "variables": fallback.get("variables", {}),
+        "category": result["category"],
+        "time_window": result["time_window"],
+        "depth": result["depth"],
+        "strategy_slug": result.get("strategy_slug"),
+        "variables": result.get("variables", {}),
     }
 
 
 def split_tasks(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> List[str]:
-    """Split a request into sub-tasks."""
+    """Split a request into sub-tasks.
+
+    DEPRECATED: Consider using scope_request() for complete scoping.
+    This function is maintained for backward compatibility but internally
+    calls scope_request() and extracts only the tasks field.
+
+    Returns only the tasks list from scope_request() output.
+    """
+    result = scope_request(request, max_tasks=max_tasks)
+    return result["tasks"]
+
+
+@observe(as_type="generation", name="scope-request")
+def scope_request(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> Dict[str, Any]:
+    """Primary scoping function - returns complete scope analysis in one call.
+
+    This is the main entry point for scope analysis. It makes a single LLM call
+    and returns both categorization (category, time_window, depth, strategy)
+    and task breakdown in one unified response.
+
+    Args:
+        request: The user's research request to scope
+        max_tasks: Maximum number of tasks to return (default: 5)
+
+    Returns:
+        Complete scope analysis with fields:
+        - category: Type of research (e.g., "news", "financial", "general")
+        - time_window: Time scope (e.g., "day", "week", "month")
+        - depth: Research depth (e.g., "brief", "overview", "deep")
+        - strategy_slug: Selected strategy identifier
+        - tasks: List of sub-tasks
+        - variables: Extracted variables (e.g., {"topic": "AI agents"})
+    """
+    lf_client = get_langfuse_client()
+
+    # Log input for tracing
+    if lf_client:
+        lf_client.update_current_generation(
+            input={"request": request, "max_tasks": max_tasks},
+            metadata={"component": "scope_request"}
+        )
+
+    # Try LLM-based scoping first
     llm = _llm_scope(request)
+
     if llm:
+        # Extract and validate tasks
         tasks = llm.get("tasks", [])
         if isinstance(tasks, list) and tasks:
-            return [t for t in tasks if t][:max_tasks]
+            tasks = [t for t in tasks if t][:max_tasks]
+        else:
+            tasks = _heuristic_tasks(request, max_tasks)
 
-    return _heuristic_tasks(request, max_tasks)
-
-
-def scope_request(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> Dict[str, Any]:
-    """Return category/time window/depth and tasks for a request."""
-    llm = _llm_scope(request)
-    if llm:
-        return {
+        result = {
             "category": llm.get("category", "general"),
             "time_window": llm.get("time_window", "week"),
             "depth": llm.get("depth", "overview"),
-            "tasks": [t for t in llm.get("tasks", []) if t][:max_tasks],
             "strategy_slug": llm.get("strategy_slug"),
+            "tasks": tasks,
             "variables": llm.get("variables", {}),
         }
+
+        if lf_client:
+            lf_client.update_current_generation(
+                output=result,
+                metadata={
+                    "source": "llm",
+                    "cache_hit": request in _LLM_CACHE,
+                    "strategy": result.get("strategy_slug"),
+                    "task_count": len(tasks)
+                }
+            )
+
+        logger.info(f"✅ SCOPE: Complete scope - {result['category']}/{result['time_window']}/{result['depth']} -> {result.get('strategy_slug')} with {len(tasks)} tasks")
+        return result
+
+    # Fallback to heuristic scoping
     fallback = _heuristic_scope(request, max_tasks)
-    return {
+    result = {
         "category": fallback["category"],
         "time_window": fallback["time_window"],
         "depth": fallback["depth"],
-        "tasks": fallback["tasks"][:max_tasks],
         "strategy_slug": fallback.get("strategy_slug"),
+        "tasks": fallback.get("tasks", _heuristic_tasks(request, max_tasks))[:max_tasks],
         "variables": fallback.get("variables", {}),
     }
+
+    if lf_client:
+        lf_client.update_current_generation(
+            output=result,
+            metadata={
+                "source": "heuristic",
+                "strategy": result.get("strategy_slug"),
+                "task_count": len(result["tasks"])
+            }
+        )
+
+    logger.info(f"✅ SCOPE: Heuristic scope - {result['category']}/{result['time_window']}/{result['depth']} with {len(result['tasks'])} tasks")
+    return result
 
 
 __all__ = ["categorize_request", "split_tasks", "scope_request"]

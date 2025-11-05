@@ -1,23 +1,21 @@
 // Action #7: Webhook Receiver (Process Results)
 // Use Case: Receive research results from API and send via email
 
-// Webhook Data (from webhook trigger)
-// Try different possible data locations depending on Langdock's structure
-// Langdock webhook triggers nest the payload under data.body
-const webhookData = data.body || data.response || data.input || data;
+// Input Variables - Pass the full webhook result object
+const webhookResult = data.input.result; // The complete webhook payload/result object
 
 // Log what we received for debugging
-console.log("Webhook data received:", JSON.stringify(webhookData, null, 2));
+console.log("Webhook result received:", JSON.stringify(webhookResult, null, 2));
 
-// Extract variables
-const taskId = webhookData.task_id; // Unique task identifier
-const email = webhookData.email; // Recipient email address
-const researchTopic = webhookData.research_topic; // Research topic
-const status = webhookData.status; // "completed" or "failed"
+// Parse all fields from the result object
+const taskId = webhookResult.task_id || webhookResult.taskId || "unknown";
+const email = webhookResult.email || webhookResult.recipient_email || "";
+const researchTopic = webhookResult.research_topic || webhookResult.topic || "Research Briefing";
+const status = webhookResult.status || "unknown";
 
 // Success - Format email content
 if (status === "completed") {
-  const result = webhookData.result || {};
+  const result = webhookResult.result || {};
 
   // Safely handle sections
   const sectionsArray = result.sections || [];
@@ -66,7 +64,7 @@ if (status === "failed") {
     subject: `Research briefing failed: ${researchTopic}`,
     body: `
 <p>We encountered an error generating your research briefing.</p>
-<p><strong>Error:</strong> ${webhookData.error}</p>
+<p><strong>Error:</strong> ${webhookResult.error}</p>
 <p>Please contact support if this continues.</p>
     `
   };
