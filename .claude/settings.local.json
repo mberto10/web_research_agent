@@ -37,7 +37,14 @@
       "Bash(if [ -f pytest.ini ])",
       "Bash(then cat pytest.ini)",
       "Bash(else echo \"No pytest.ini found\")",
-      "Bash(fi)"
+      "Bash(fi)",
+      "Bash(git fetch:*)",
+      "Bash(git log:*)",
+      "Bash(git show-ref:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo view:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)"
     ],
     "deny": [],
     "ask": []
