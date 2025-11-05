@@ -49,7 +49,6 @@ class Strategy(BaseModel):
     queries: Dict[str, str] = Field(default_factory=dict)
     filters: Dict[str, Any] = Field(default_factory=dict)
     quorum: Dict[str, Any] = Field(default_factory=dict)
-    render: Dict[str, Any] = Field(default_factory=dict)
     limits: Dict[str, Any] = Field(default_factory=dict)
     finalize: Dict[str, Any] = Field(default_factory=dict)  # New field for reactive finalize
 

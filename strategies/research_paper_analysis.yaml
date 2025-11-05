@@ -74,7 +74,3 @@ tool_chain:
 limits:
   max_results: 20
   max_llm_queries: 3
-
-render:
-  type: markdown
-  sections: []

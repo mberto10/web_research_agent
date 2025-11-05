@@ -100,11 +100,3 @@ tool_chain:
 limits:
   max_results: 20
   max_llm_queries: 2
-
-render:
-  type: markdown
-  sections:
-    - "Breaking News"
-    - "In-Depth Analysis"
-    - "International Perspectives"
-    - "Key Takeaways"

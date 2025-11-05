@@ -71,7 +71,3 @@ finalize:
 limits:
   max_results: 20
   max_llm_queries: 2
-
-render:
-  type: markdown
-  sections: []

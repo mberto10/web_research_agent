@@ -14,7 +14,6 @@ from strategies import StrategyIndexEntry, load_strategy_index
 logger = logging.getLogger(__name__)
 
 
-_LLM_CACHE: Dict[str, Dict[str, Any]] = {}
 DEFAULT_MAX_TASKS = 5
 
 
@@ -212,6 +211,14 @@ def _heuristic_entry(request: str, entries: List[StrategyIndexEntry]) -> Optiona
 
 
 def _heuristic_scope(request: str, max_tasks: int) -> Dict[str, Any]:
+    """DEPRECATED: Heuristic-based scoping fallback.
+
+    This function is no longer used in production workflows. It is retained
+    for backward compatibility with direct imports only.
+
+    WARNING: Do not use this function. LLM classification is now required.
+    All production workflows will fail if LLM classification is unavailable.
+    """
     entries = _active_strategies()
     entry = _heuristic_entry(request, entries)
     tasks = _heuristic_tasks(request, max_tasks)
@@ -241,20 +248,17 @@ def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
     """Try to use an LLM to scope a request. Returns None on failure.
 
     NOTE: This is an internal implementation function. Tracing happens at the
-    categorize_request() level to avoid duplicate traces and handle caching properly.
+    categorize_request() level to avoid duplicate traces.
     """
-    if request in _LLM_CACHE:
-        logger.info(f"🔄 SCOPE: Using cached result for request: {request[:50]}...")
-        return _LLM_CACHE[request]
     try:  # Import inside the function so the dependency is optional.
         from openai import OpenAI  # type: ignore
     except Exception:
-        logger.warning("⚠️ SCOPE: OpenAI import failed, using heuristic fallback")
+        logger.warning("⚠️ SCOPE: OpenAI import failed. Workflow will fail.")
         return None
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        logger.warning("⚠️ SCOPE: No OPENAI_API_KEY set, using heuristic fallback")
+        logger.warning("⚠️ SCOPE: No OPENAI_API_KEY set. Workflow will fail.")
         return None
 
     entries = _active_strategies()
@@ -380,7 +384,6 @@ def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
         }
         variables = _ensure_variables(entry, tasks, request, provided_variables) if entry else {}
         result["variables"] = variables
-        _LLM_CACHE[request] = result
         return result
     except json.JSONDecodeError as e:
         logger.error(f"❌ SCOPE: Failed to parse LLM response as JSON: {e}")
@@ -445,6 +448,9 @@ def scope_request(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> Dict[str,
         - strategy_slug: Selected strategy identifier
         - tasks: List of sub-tasks
         - variables: Extracted variables (e.g., {"topic": "AI agents"})
+
+    Raises:
+        RuntimeError: If LLM classification fails (no API key, import error, etc.)
     """
     lf_client = get_langfuse_client()
 
@@ -455,62 +461,46 @@ def scope_request(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> Dict[str,
             metadata={"component": "scope_request"}
         )
 
-    # Try LLM-based scoping first
+    # Try LLM-based scoping (required)
     llm = _llm_scope(request)
 
-    if llm:
-        # Extract and validate tasks
-        tasks = llm.get("tasks", [])
-        if isinstance(tasks, list) and tasks:
-            tasks = [t for t in tasks if t][:max_tasks]
-        else:
-            tasks = _heuristic_tasks(request, max_tasks)
-
-        result = {
-            "category": llm.get("category", "general"),
-            "time_window": llm.get("time_window", "week"),
-            "depth": llm.get("depth", "overview"),
-            "strategy_slug": llm.get("strategy_slug"),
-            "tasks": tasks,
-            "variables": llm.get("variables", {}),
-        }
-
+    if not llm:
+        error_msg = "LLM classification failed. Check OPENAI_API_KEY and configuration."
+        logger.error(f"❌ SCOPE: {error_msg}")
         if lf_client:
             lf_client.update_current_generation(
-                output=result,
-                metadata={
-                    "source": "llm",
-                    "cache_hit": request in _LLM_CACHE,
-                    "strategy": result.get("strategy_slug"),
-                    "task_count": len(tasks)
-                }
+                output={"error": error_msg},
+                metadata={"source": "llm_failed"}
             )
+        raise RuntimeError(error_msg)
 
-        logger.info(f"✅ SCOPE: Complete scope - {result['category']}/{result['time_window']}/{result['depth']} -> {result.get('strategy_slug')} with {len(tasks)} tasks")
-        return result
+    # Extract and validate tasks
+    tasks = llm.get("tasks", [])
+    if isinstance(tasks, list) and tasks:
+        tasks = [t for t in tasks if t][:max_tasks]
+    else:
+        tasks = _heuristic_tasks(request, max_tasks)
 
-    # Fallback to heuristic scoping
-    fallback = _heuristic_scope(request, max_tasks)
     result = {
-        "category": fallback["category"],
-        "time_window": fallback["time_window"],
-        "depth": fallback["depth"],
-        "strategy_slug": fallback.get("strategy_slug"),
-        "tasks": fallback.get("tasks", _heuristic_tasks(request, max_tasks))[:max_tasks],
-        "variables": fallback.get("variables", {}),
+        "category": llm.get("category", "general"),
+        "time_window": llm.get("time_window", "week"),
+        "depth": llm.get("depth", "overview"),
+        "strategy_slug": llm.get("strategy_slug"),
+        "tasks": tasks,
+        "variables": llm.get("variables", {}),
     }
 
     if lf_client:
         lf_client.update_current_generation(
             output=result,
             metadata={
-                "source": "heuristic",
+                "source": "llm",
                 "strategy": result.get("strategy_slug"),
-                "task_count": len(result["tasks"])
+                "task_count": len(tasks)
             }
         )
 
-    logger.info(f"✅ SCOPE: Heuristic scope - {result['category']}/{result['time_window']}/{result['depth']} with {len(result['tasks'])} tasks")
+    logger.info(f"✅ SCOPE: Complete scope - {result['category']}/{result['time_window']}/{result['depth']} -> {result.get('strategy_slug')} with {len(tasks)} tasks")
     return result
 
 

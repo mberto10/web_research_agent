@@ -3,7 +3,7 @@ from __future__ import annotations
 """Lightweight configuration loader for prompts and LLM settings.
 
 Loads a YAML file from `config/settings.yaml` when present. Provides helpers to
-retrieve model/parameters per stage (fill, summarize, qc, renderer) and
+retrieve model/parameters per stage (fill, summarize, qc) and
 per-strategy per-step overrides.
 """
 
@@ -27,7 +27,6 @@ def _default_config() -> Dict[str, Any]:
                 "fill": {"model": "gpt-4o-mini", "temperature": 0},
                 "summarize": {"model": "gpt-4o-mini", "temperature": 0},
                 "qc": {"model": "gpt-4o-mini", "temperature": 0},
-                "renderer": {"model": "gpt-4o-mini", "temperature": 0},
                 "analyzer": {"model": "gpt-4o-mini", "temperature": 0.3},
                 "cluster": {"model": "gpt-4o-mini", "temperature": 0.2},
                 "nodes": {
@@ -37,7 +36,7 @@ def _default_config() -> Dict[str, Any]:
                     "llm_analyzer": {"model": "gpt-4o-mini", "temperature": 0.3},
                 },
             },
-            "per_strategy": {},  # strategy_slug -> { fill/summarize/qc/renderer/analyzer: {...}, nodes: {...} }
+            "per_strategy": {},  # strategy_slug -> { fill/summarize/qc/analyzer: {...}, nodes: {...} }
             "per_step": {},  # "slug:use" -> { fill: {...}, call: {inputs: {...}} }
         },
         "prompts": {
@@ -137,7 +136,7 @@ def _deep_merge(dst: Dict[str, Any], src: Dict[str, Any]) -> None:
 
 
 def get_llm_config(stage: str, strategy_slug: Optional[str] = None, step_use: Optional[str] = None) -> Dict[str, Any]:
-    """Return LLM config for a stage (fill/summarize/qc/renderer), with overrides."""
+    """Return LLM config for a stage (fill/summarize/qc), with overrides."""
     cfg = load_config()
     result: Dict[str, Any] = {}
     # defaults

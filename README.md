@@ -8,7 +8,7 @@ This README describes the current implementation precisely with file references 
 
 - Phases: Scope → Fill → Research → Finalize → Write → QC
 - Strategy selection and execution are fully declarative via YAML plus a dynamic strategy index.
-- LLM use is scoped and schema-validated (tool calls and JSON), with heuristic fallbacks.
+- LLM use is scoped and schema-validated (tool calls and JSON). LLM classification is required for all workflows.
 
 ## Data Model
 
@@ -46,10 +46,10 @@ This README describes the current implementation precisely with file references 
 
 - Purpose: select strategy, set `category/time_window/depth`, produce a small task list, and fill per‑strategy variables via a tool call.
 - Implementation:
-  - `_llm_scope` formats a central prompt + dynamic catalog from the strategy index and forces a `set_scope` tool call (core/scope.py:236).
-  - The tool schema requires: `strategy_slug`, `category`, `time_window`, `depth`, `tasks`; optional `variables` supports string or string[] values (core/scope.py:71).
-  - Results are cached per request and traced via Langfuse when configured (core/scope.py:239).
-  - If LLM/tool call fails, `_heuristic_scope` picks a strategy from the index using keywords and splits tasks heuristically (core/scope.py:210).
+  - `_llm_scope` formats a central prompt + dynamic catalog from the strategy index and forces a `set_scope` tool call (core/scope.py:240).
+  - The tool schema requires: `strategy_slug`, `category`, `time_window`, `depth`, `tasks`; optional `variables` supports string or string[] values (core/scope.py:75).
+  - Results are cached per request and traced via Langfuse when configured (core/scope.py:246).
+  - If LLM/tool call fails (missing API key, network error, etc.), `scope_request()` raises RuntimeError and the workflow fails immediately (core/scope.py:464). No heuristic fallback is used.
 - Prompt source: `prompts.nodes.scope_classifier` (config/settings.yaml:118).
 - Output propagation in graph:
   - `scope(state)` stores labels, slug and any variables into `state.vars` for downstream use (core/graph.py:337).
@@ -75,10 +75,9 @@ This README describes the current implementation precisely with file references 
 - Variables for templating are merged per iteration: `topic/subtopic/time_window/region` + everything from `state.vars` (core/graph.py:451).
 - Evidence is normalized, aggregated per iteration, then deduped/scored once against the global budget (core/graph.py:611, core/graph.py:615).
 
-## Finalize and Write
+## Finalize
 
-- Finalize (optional ReAct): tool-aware ReAct pass that can call tools during report assembly when enabled in a strategy’s finalize config (core/graph.py:860).
-- Write: renderer-only path if finalize is not reactive — converts evidence to sections/citations via the chosen renderer (core/graph.py:564).
+- Finalize (optional ReAct): tool-aware ReAct pass that can call tools during report assembly when enabled in a strategy's finalize config. The LLM generates markdown sections and citations directly from the evidence (core/graph.py:778-1230).
 
 ## QC
 

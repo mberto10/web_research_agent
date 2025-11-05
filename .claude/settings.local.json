@@ -25,7 +25,13 @@
       "mcp__linear-server__update_issue",
       "mcp__linear-server__create_comment",
       "WebFetch(domain:docs.replit.com)",
-      "mcp__linear-server__create_issue"
+      "mcp__linear-server__create_issue",
+      "Bash(cat:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(.gitignore)",
+      "Bash(tree:*)",
+      "WebFetch(domain:langfuse.com)",
+      "mcp__linear-server__list_issue_labels"
     ],
     "deny": [],
     "ask": []

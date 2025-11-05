@@ -130,7 +130,6 @@ web_research_agent/
 │   ├── llm_analyzer.py      # LLM analysis tool
 │   ├── http.py              # Web scraper
 │   └── parse.py             # Content parser
-└── renderers/               # Output formatting
 
 ```
 
@@ -216,7 +215,7 @@ llm:
   defaults:
     fill:
       model: gpt-4o-mini  # or gpt-4, gpt-3.5-turbo
-    renderer:
+    analyzer:
       model: gpt-4       # for better synthesis
 ```
 

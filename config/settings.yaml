@@ -3,8 +3,8 @@ llm:
   # Global defaults applied to core LangGraph nodes. Each section maps directly
   # to helper functions in `core/config.py`, which in turn are consumed at the
   # following integration points:
-  #   - fill/summarize/qc/renderer/analyzer/cluster -> get_llm_config(...)
-  #   - nodes.*                                     -> get_node_llm_config(...)
+  #   - fill/summarize/qc/analyzer/cluster -> get_llm_config(...)
+  #   - nodes.*                            -> get_node_llm_config(...)
   # Changing these values alters which foundation model (and tuning params)
   # every workflow node invokes by default.
   # ---------------------------------------------------------------------------
@@ -21,10 +21,6 @@ llm:
     qc:
       model: gpt-5-mini
       temperature: 0
-    # Post-processing renderer prompts (e.g. markdown/newsletter output)
-    renderer:
-      model: gpt-5-mini
-      temperature: 0.2
     # Tool adapter `LLMAnalyzerAdapter` (used by strategies that synthesize
     # whole briefings inside finalize/write phases)
     analyzer:
@@ -61,8 +57,6 @@ llm:
     daily_news_briefing:
       fill:
         temperature: 0.4  # Encourage more diverse search params for breaking news
-      renderer:
-        model: gpt-5-mini  # Keep renderer aligned even if global default drifts
       analyzer:
         model: gpt-5-mini
       nodes:
@@ -114,7 +108,7 @@ prompts:
         "improvement_suggestions": ["actionable recommendations"]
       }
   nodes:
-    # Used by `core/scope._llm_scope` before the heuristic fallback kicks in
+    # Used by `core/scope._llm_scope` for classification (required - no fallback)
     scope_classifier: |
       You are the scope classification assistant for a research graph. Review the available
       strategies and choose the best fit for the user's request.

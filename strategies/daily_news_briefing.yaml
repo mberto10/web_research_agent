@@ -145,7 +145,3 @@ finalize:
     - List all sources at the end with numbers, dates, and complete URLs
     - Do NOT add any text like "If you want I can produce..." or offer additional services
     - End the report immediately after the Sources section
-
-render:
-  type: markdown  # Options: markdown (raw), newsletter (HTML email), pdf (PDF-ready)
-  sections: []

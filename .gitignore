@@ -19,3 +19,10 @@ build/
 debug_logs/
 briefing_*.md
 debug_log_*.json
+
+# Node.js (not used in this Python project)
+node_modules/
+package-lock.json
+
+# Claude Code settings
+.claude/

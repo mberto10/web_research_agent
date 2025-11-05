@@ -31,6 +31,20 @@ def test_graph_compiles(monkeypatch):
     monkeypatch.setattr("core.graph._cluster_llm", lambda prompt: "- summary")
     import core.graph as graph_module
     monkeypatch.setattr(graph_module, "_refine_queries_with_llm", lambda *a, **k: {})
+
+    # Mock _llm_scope to return a valid result (no API key needed)
+    import core.scope as scope_module
+    def mock_llm_scope(request):
+        return {
+            "category": "general",
+            "time_window": "week",
+            "depth": "overview",
+            "strategy_slug": "general/week_overview",
+            "tasks": ["economy", "politics"],
+            "variables": {"topic": "economy"}
+        }
+    monkeypatch.setattr(scope_module, "_llm_scope", mock_llm_scope)
+
     graph = build_graph()
     state = State(user_request="economy and politics")
     result = graph.invoke(state, config={"configurable": {"thread_id": "test"}})
@@ -39,5 +53,5 @@ def test_graph_compiles(monkeypatch):
     assert result["time_window"] == "week"
     assert result["strategy_slug"] == "general/week_overview"
     assert result["tasks"] == ["economy", "politics"]
-    # After removal of template renderers, sections contain markdown output
+    # Sections contain markdown output directly from LLM
     assert isinstance(result["sections"], list)

@@ -330,46 +330,37 @@ def scope(state: State) -> State:
     """Scope phase categorizes the request and selects a strategy."""
     logger.info(f"🔍 SCOPE: Starting scope analysis for: {state.user_request[:100]}...")
 
-    # Perform complete scope analysis if needed (single unified call)
-    needs_scoping = (
-        not (state.category and state.time_window and state.depth)
-        or not state.tasks
-    )
+    # Always perform complete scope analysis (single unified LLM call)
+    scope_result = scope_request(state.user_request)
 
-    if needs_scoping:
-        # Single LLM call that returns both categorization AND tasks
-        scope_result = scope_request(state.user_request)
+    # Apply categorization fields (overwrite any pre-populated values)
+    state.category = scope_result["category"]
+    state.time_window = scope_result["time_window"]
+    state.depth = scope_result["depth"]
 
-        # Apply categorization fields if not already set
-        state.category = state.category or scope_result["category"]
-        state.time_window = state.time_window or scope_result["time_window"]
-        state.depth = state.depth or scope_result["depth"]
+    # Apply strategy
+    slug = scope_result.get("strategy_slug")
+    if isinstance(slug, str) and slug:
+        state.strategy_slug = slug
 
-        # Apply strategy if not already set
-        if not state.strategy_slug:
-            slug = scope_result.get("strategy_slug")
-            if isinstance(slug, str) and slug:
-                state.strategy_slug = slug
+    # Apply tasks
+    state.tasks = scope_result["tasks"]
+    state.queries = list(state.tasks)
 
-        # Apply tasks if not already set
-        if not state.tasks:
-            state.tasks = scope_result["tasks"]
-            state.queries = list(state.tasks)
+    # Merge variables into state
+    scope_vars = scope_result.get("variables")
+    if isinstance(scope_vars, dict):
+        for key, value in scope_vars.items():
+            if not isinstance(key, str):
+                continue
+            if isinstance(value, str):
+                state.vars[key] = value
+            elif isinstance(value, list):
+                # Only store list of strings
+                vv = [str(it) for it in value if isinstance(it, (str, int, float))]
+                state.vars[key] = vv
 
-        # Merge variables into state
-        scope_vars = scope_result.get("variables")
-        if isinstance(scope_vars, dict):
-            for key, value in scope_vars.items():
-                if not isinstance(key, str):
-                    continue
-                if isinstance(value, str):
-                    state.vars[key] = value
-                elif isinstance(value, list):
-                    # Only store list of strings
-                    vv = [str(it) for it in value if isinstance(it, (str, int, float))]
-                    state.vars[key] = vv
-
-    # Select strategy
+    # Select strategy if not provided by LLM
     if (
         state.strategy_slug is None
         and state.category
@@ -800,13 +791,6 @@ def finalize(state: State) -> State:
     evidence_limit = strategy.limits.get("max_results") if strategy.limits else 100
 
     steps = [s for s in runtime_plan if (s.get("phase") or "research") == "finalize"]
-    if not steps:
-        # Heuristic: any step with 'when' and provider in {http, parse}
-        steps = [
-            s
-            for s in runtime_plan
-            if s.get("when") and str(s.get("use", "")).split(".")[0] in {"http", "parse"}
-        ]
     if not steps:
         return state
 

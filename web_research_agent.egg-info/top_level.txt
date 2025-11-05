@@ -1,6 +1,0 @@
-api
-config
-core
-renderers
-strategies
-tools

@@ -16,8 +16,5 @@ filters:
       - official
 quorum:
   min_sources: 3
-render:
-  type: markdown
-  sections: []
 limits:
   max_results: 20

@@ -17,7 +17,6 @@ def _make_strategy():
             depth="brief",
         ),
         tool_chain=[],
-        render={"type": "briefing", "sections": ["summary"]},
         quorum={"min_sources": 1},
         filters={"recency": "week"},
     )
