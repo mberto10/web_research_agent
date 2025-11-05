@@ -1,0 +1,29 @@
+# Bug Report Template
+# Variables: short_description, detailed_description, steps, expected, actual, os, version
+
+title: "[BUG] {short_description}"
+
+description: |
+  ## Description
+  {detailed_description}
+
+  ## Steps to Reproduce
+  {steps}
+
+  ## Expected Behavior
+  {expected}
+
+  ## Actual Behavior
+  {actual}
+
+  ## Environment
+  - OS: {os}
+  - Version: {version}
+
+labels:
+  - bug
+
+priority: 2  # Default to High priority
+
+# Optional fields (uncomment to use):
+# estimate: 3

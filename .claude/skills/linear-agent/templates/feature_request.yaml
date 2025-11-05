@@ -1,0 +1,26 @@
+# Feature Request Template
+# Variables: short_description, problem, solution, alternatives, success_criteria
+
+title: "[FEATURE] {short_description}"
+
+description: |
+  ## Problem Statement
+  {problem}
+
+  ## Proposed Solution
+  {solution}
+
+  ## Alternatives Considered
+  {alternatives}
+
+  ## Success Criteria
+  {success_criteria}
+
+labels:
+  - feature
+  - needs-review
+
+priority: 3  # Default to Normal priority
+
+# Optional fields:
+# estimate: 5

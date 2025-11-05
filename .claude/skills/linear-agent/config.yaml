@@ -1,0 +1,114 @@
+# Linear Agent Skill Configuration
+# Optional configuration file for defaults and preferences
+
+# Default team (used when not specified)
+# Leave empty to always prompt
+default_team: ""
+
+# Default priority for new issues
+# 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low
+default_priority: 3
+
+# Default labels to add to all issues (optional)
+# Leave empty for no default labels
+default_labels: []
+
+# Template preferences
+templates:
+  # Default template for bugs
+  bug: "bug_report"
+
+  # Default template for features
+  feature: "feature_request"
+
+  # Default template for tasks
+  task: "task"
+
+# Query defaults
+query:
+  # Maximum issues to return in queries
+  default_limit: 50
+
+  # Default output format for query results
+  # Options: text, json, csv
+  default_format: "text"
+
+# Reporting defaults
+reporting:
+  # Default report type
+  # Options: summary, sprint
+  default_type: "summary"
+
+  # Default period for sprint reports (days)
+  default_period: 7
+
+  # Default output format for reports
+  # Options: markdown, json
+  default_format: "markdown"
+
+# API settings
+api:
+  # Enable verbose output by default
+  verbose: false
+
+  # Enable retry logic (recommended)
+  enable_retries: true
+
+  # Maximum retries for failed requests
+  max_retries: 3
+
+  # Rate limit throttling (requests per hour)
+  # Linear allows 1500, we default to 1400 for safety
+  rate_limit: 1400
+
+# Output preferences
+output:
+  # Show issue URLs in results
+  show_urls: true
+
+  # Show issue identifiers (e.g., ISS-123)
+  show_identifiers: true
+
+  # Show timestamps
+  show_timestamps: false
+
+  # Color output (if terminal supports it)
+  use_colors: true
+
+# Batch operation settings
+batch:
+  # Confirm before executing large batches
+  confirm_threshold: 10
+
+  # Show progress during batch operations
+  show_progress: true
+
+  # Continue on errors (vs stop on first error)
+  continue_on_error: true
+
+  # Save results to file after batch operations
+  auto_save_results: true
+
+# Workspace settings (optional)
+workspace:
+  # Workspace ID (if you have multiple workspaces)
+  id: ""
+
+  # Workspace name for display
+  name: ""
+
+# Examples of how to customize:
+#
+# 1. Set default team to skip selection prompts:
+#    default_team: "Backend Team"
+#
+# 2. Always add certain labels:
+#    default_labels: ["needs-triage"]
+#
+# 3. Increase query limit for large teams:
+#    query:
+#      default_limit: 100
+#
+# 4. Enable verbose output by default:
+#    api:
+#      verbose: true

@@ -1,0 +1,19 @@
+# Task Template
+# Variables: short_description, detailed_description, acceptance_criteria
+
+title: "{short_description}"
+
+description: |
+  ## Description
+  {detailed_description}
+
+  ## Acceptance Criteria
+  {acceptance_criteria}
+
+labels:
+  - task
+
+priority: 3  # Default to Normal priority
+
+# Optional fields:
+# estimate: 2
