@@ -24,6 +24,7 @@ from .langfuse_tracing import get_langfuse_client, observe
 from tools import get_tool, register_default_adapters
 from .scope import scope_request
 from strategies import load_strategy, select_strategy, get_index_entry_by_slug
+from api.database import db_manager
 
 
 logger = logging.getLogger(__name__)
@@ -326,12 +327,23 @@ def _refine_queries_with_llm(
     return refined
 
 
-def scope(state: State) -> State:
+async def scope(state: State) -> State:
     """Scope phase categorizes the request and selects a strategy."""
     logger.info(f"🔍 SCOPE: Starting scope analysis for: {state.user_request[:100]}...")
 
-    # Always perform complete scope analysis (single unified LLM call)
-    scope_result = scope_request(state.user_request)
+    # Create database session for caching
+    scope_result = None
+    try:
+        async with db_manager.async_session_maker() as db_session:
+            # Always perform complete scope analysis (single unified LLM call with optional caching)
+            scope_result = await scope_request(state.user_request, db_session=db_session)
+    except Exception as e:
+        logger.warning(f"⚠️ SCOPE: Database session creation failed, proceeding without cache: {e}")
+        # Fallback: call without database session
+        scope_result = await scope_request(state.user_request, db_session=None)
+
+    if not scope_result:
+        raise RuntimeError("Scope analysis failed")
 
     # Apply categorization fields (overwrite any pre-populated values)
     state.category = scope_result["category"]

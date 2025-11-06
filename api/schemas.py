@@ -1,6 +1,7 @@
 """Pydantic schemas for request/response validation."""
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from typing import Dict, Any
 
 
 class TaskCreate(BaseModel):
@@ -43,3 +44,46 @@ class BatchExecuteResponse(BaseModel):
     frequency: str
     tasks_found: int
     started_at: str
+
+
+# ============================================================================
+# STRATEGY SCHEMAS
+# ============================================================================
+
+class StrategyCreate(BaseModel):
+    """Schema for creating a new strategy."""
+    slug: str
+    yaml_content: Dict[str, Any]
+
+
+class StrategyUpdate(BaseModel):
+    """Schema for updating an existing strategy."""
+    yaml_content: Dict[str, Any]
+
+
+class StrategyResponse(BaseModel):
+    """Schema for strategy response."""
+    id: str
+    slug: str
+    yaml_content: Dict[str, Any]
+    is_active: bool
+    created_at: str
+    updated_at: str
+
+
+# ============================================================================
+# GLOBAL SETTINGS SCHEMAS
+# ============================================================================
+
+class GlobalSettingUpdate(BaseModel):
+    """Schema for updating a global setting."""
+    value: Dict[str, Any]
+
+
+class GlobalSettingResponse(BaseModel):
+    """Schema for global setting response."""
+    id: str
+    key: str
+    value: Dict[str, Any]
+    created_at: str
+    updated_at: str

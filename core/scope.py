@@ -6,10 +6,13 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.config import get_node_llm_config, get_node_prompt
 from core.langfuse_tracing import get_langfuse_client, observe
 from core.debug_log import dbg
 from strategies import StrategyIndexEntry, load_strategy_index
+from api.crud import get_cached_scope_classification, save_scope_classification
 
 logger = logging.getLogger(__name__)
 
@@ -395,7 +398,7 @@ def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def categorize_request(request: str) -> Dict[str, Any]:
+async def categorize_request(request: str) -> Dict[str, Any]:
     """Return category, time window, depth, strategy, and variables for a request.
 
     DEPRECATED: Consider using scope_request() for complete scoping.
@@ -405,7 +408,7 @@ def categorize_request(request: str) -> Dict[str, Any]:
     Returns a subset of scope_request() output with only:
     - category, time_window, depth, strategy_slug, variables
     """
-    result = scope_request(request)
+    result = await scope_request(request)
     return {
         "category": result["category"],
         "time_window": result["time_window"],
@@ -415,7 +418,7 @@ def categorize_request(request: str) -> Dict[str, Any]:
     }
 
 
-def split_tasks(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> List[str]:
+async def split_tasks(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> List[str]:
     """Split a request into sub-tasks.
 
     DEPRECATED: Consider using scope_request() for complete scoping.
@@ -424,21 +427,25 @@ def split_tasks(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> List[str]:
 
     Returns only the tasks list from scope_request() output.
     """
-    result = scope_request(request, max_tasks=max_tasks)
+    result = await scope_request(request, max_tasks=max_tasks)
     return result["tasks"]
 
 
 @observe(as_type="generation", name="scope-request")
-def scope_request(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> Dict[str, Any]:
+async def scope_request(
+    request: str,
+    max_tasks: int = DEFAULT_MAX_TASKS,
+    db_session: Optional[AsyncSession] = None
+) -> Dict[str, Any]:
     """Primary scoping function - returns complete scope analysis in one call.
 
-    This is the main entry point for scope analysis. It makes a single LLM call
-    and returns both categorization (category, time_window, depth, strategy)
-    and task breakdown in one unified response.
+    This is the main entry point for scope analysis. It checks the database cache first,
+    and if there's no cache hit, makes a single LLM call and stores the result.
 
     Args:
         request: The user's research request to scope
         max_tasks: Maximum number of tasks to return (default: 5)
+        db_session: Optional database session for caching (default: None)
 
     Returns:
         Complete scope analysis with fields:
@@ -460,6 +467,23 @@ def scope_request(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> Dict[str,
             input={"request": request, "max_tasks": max_tasks},
             metadata={"component": "scope_request"}
         )
+
+    # Try cache lookup first if db_session provided
+    if db_session:
+        try:
+            cached = await get_cached_scope_classification(db_session, request)
+            if cached:
+                logger.info(f"✅ SCOPE: Cache hit for: {request[:50]}...")
+                if lf_client:
+                    lf_client.update_current_generation(
+                        output=cached,
+                        metadata={"source": "cache", "cache_hit": True}
+                    )
+                return cached
+            else:
+                logger.debug(f"🔍 SCOPE: Cache miss for: {request[:50]}...")
+        except Exception as e:
+            logger.warning(f"⚠️ SCOPE: Cache lookup failed: {e}")
 
     # Try LLM-based scoping (required)
     llm = _llm_scope(request)
@@ -490,13 +514,22 @@ def scope_request(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> Dict[str,
         "variables": llm.get("variables", {}),
     }
 
+    # Store in cache if db_session provided
+    if db_session:
+        try:
+            await save_scope_classification(db_session, request, result)
+            logger.info(f"💾 SCOPE: Stored classification in cache")
+        except Exception as e:
+            logger.warning(f"⚠️ SCOPE: Cache storage failed: {e}")
+
     if lf_client:
         lf_client.update_current_generation(
             output=result,
             metadata={
                 "source": "llm",
                 "strategy": result.get("strategy_slug"),
-                "task_count": len(tasks)
+                "task_count": len(tasks),
+                "cache_stored": db_session is not None
             }
         )
 

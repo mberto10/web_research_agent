@@ -2,20 +2,22 @@ from __future__ import annotations
 
 """Lightweight configuration loader for prompts and LLM settings.
 
-Loads a YAML file from `config/settings.yaml` when present. Provides helpers to
-retrieve model/parameters per stage (fill, summarize, qc) and
+Loads configuration from database first, falls back to YAML file `config/settings.yaml`.
+Provides helpers to retrieve model/parameters per stage (fill, summarize, qc) and
 per-strategy per-step overrides.
 """
 
 from typing import Any, Dict, Optional
 from pathlib import Path
 import copy
+import logging
 
 try:
     import yaml
 except Exception:  # pragma: no cover - yaml is a dependency in this repo
     yaml = None  # type: ignore
 
+logger = logging.getLogger(__name__)
 
 _CONFIG_CACHE: Optional[Dict[str, Any]] = None
 
@@ -107,10 +109,53 @@ def _default_config() -> Dict[str, Any]:
     }
 
 
+async def load_config_from_db(db_session) -> Optional[Dict[str, Any]]:
+    """Load configuration from database and populate global cache.
+
+    Returns merged config if DB settings exist, otherwise None.
+    This function should be called at application startup.
+    """
+    global _CONFIG_CACHE
+
+    try:
+        from api.crud import get_global_setting
+
+        # Try to load llm_defaults and prompts from DB
+        llm_defaults_setting = await get_global_setting(db_session, "llm_defaults")
+        prompts_setting = await get_global_setting(db_session, "prompts")
+
+        if llm_defaults_setting or prompts_setting:
+            base = _default_config()
+
+            if llm_defaults_setting:
+                base["llm"]["defaults"] = llm_defaults_setting.value
+
+            if prompts_setting:
+                base["prompts"] = prompts_setting.value
+
+            # Populate global cache
+            _CONFIG_CACHE = base
+            logger.info("✓ Loaded configuration from database")
+            return base
+
+        logger.debug("No configuration found in database, will use YAML")
+        return None
+
+    except Exception as e:
+        logger.warning(f"Failed to load config from database: {e}")
+        return None
+
+
 def load_config() -> Dict[str, Any]:
+    """Load configuration from cache, falling back to YAML if not cached.
+
+    To load from database, call load_config_from_db() first to populate the cache.
+    """
     global _CONFIG_CACHE
     if _CONFIG_CACHE is not None:
         return _CONFIG_CACHE
+
+    # Fall back to YAML
     base = _default_config()
     path = Path("config/settings.yaml")
     if yaml and path.exists():
@@ -120,11 +165,24 @@ def load_config() -> Dict[str, Any]:
                 merged = copy.deepcopy(base)
                 _deep_merge(merged, data)
                 _CONFIG_CACHE = merged
+                logger.info("✓ Loaded configuration from YAML file")
                 return merged
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to load YAML config: {e}")
+
     _CONFIG_CACHE = base
+    logger.info("✓ Using default configuration")
     return base
+
+
+def clear_config_cache():
+    """Clear the global configuration cache.
+
+    Call this after updating configuration in the database.
+    """
+    global _CONFIG_CACHE
+    _CONFIG_CACHE = None
+    logger.debug("Configuration cache cleared")
 
 
 def _deep_merge(dst: Dict[str, Any], src: Dict[str, Any]) -> None:

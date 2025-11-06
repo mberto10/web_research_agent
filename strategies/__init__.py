@@ -5,9 +5,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 import json
+import logging
 from jsonschema import validate
 from pydantic import BaseModel, Field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # Pydantic models -----------------------------------------------------------
@@ -108,9 +111,59 @@ class StrategyIndexEntry(BaseModel):
         return None
 
 
-_INDEX_PATH = Path(__file__).resolve().parent / "index.yaml"
+# Constants and caches ------------------------------------------------------
+
+_PACKAGE_DIR = Path(__file__).resolve().parent
+_SCHEMA = json.loads((_PACKAGE_DIR / "schema.json").read_text())
+_INDEX_PATH = _PACKAGE_DIR / "index.yaml"
 _STRATEGY_INDEX_CACHE: Optional[List[StrategyIndexEntry]] = None
 _STRATEGY_LOOKUP_CACHE: Dict[Tuple[str, str, str], StrategyIndexEntry] = {}
+_DB_STRATEGIES_CACHE: Dict[str, Strategy] = {}  # Cache for DB-loaded strategies
+
+
+async def load_strategies_from_db(db_session) -> Dict[str, Strategy]:
+    """Load all active strategies from database.
+
+    Returns dict mapping slug -> Strategy.
+    Populates the global _DB_STRATEGIES_CACHE.
+    """
+    global _DB_STRATEGIES_CACHE
+
+    try:
+        from api.crud import list_strategies
+
+        db_strategies = await list_strategies(db_session, active_only=True)
+
+        result = {}
+        for db_strat in db_strategies:
+            try:
+                # Validate and parse strategy
+                yaml_content = db_strat.yaml_content
+                validate(instance=yaml_content, schema=_SCHEMA)
+                strategy = Strategy.model_validate(yaml_content)
+                result[db_strat.slug] = strategy
+            except Exception as e:
+                logger.warning(f"Failed to parse strategy {db_strat.slug} from DB: {e}")
+
+        _DB_STRATEGIES_CACHE = result
+        logger.info(f"✓ Loaded {len(result)} strategies from database")
+        return result
+
+    except Exception as e:
+        logger.warning(f"Failed to load strategies from database: {e}")
+        return {}
+
+
+def clear_strategy_cache():
+    """Clear all strategy caches.
+
+    Call this after creating/updating/deleting strategies in the database.
+    """
+    global _STRATEGY_INDEX_CACHE, _STRATEGY_LOOKUP_CACHE, _DB_STRATEGIES_CACHE
+    _STRATEGY_INDEX_CACHE = None
+    _STRATEGY_LOOKUP_CACHE.clear()
+    _DB_STRATEGIES_CACHE.clear()
+    logger.debug("Strategy caches cleared")
 
 
 def _build_strategy_lookup(entries: List[StrategyIndexEntry]) -> None:
@@ -129,38 +182,64 @@ def _build_strategy_lookup(entries: List[StrategyIndexEntry]) -> None:
 
 
 def load_strategy_index(refresh: bool = False) -> List[StrategyIndexEntry]:
-    """Load the strategy index from disk, caching the result."""
+    """Load the strategy index from database cache and disk, merging both.
+
+    Database strategies take precedence over file-based strategies.
+    """
 
     global _STRATEGY_INDEX_CACHE
     if _STRATEGY_INDEX_CACHE is not None and not refresh:
         return _STRATEGY_INDEX_CACHE
 
-    if not _INDEX_PATH.exists():
-        _STRATEGY_INDEX_CACHE = []
-        _STRATEGY_LOOKUP_CACHE.clear()
-        return _STRATEGY_INDEX_CACHE
-
-    raw = yaml.safe_load(_INDEX_PATH.read_text())
-    items = []
-    if isinstance(raw, dict):
-        data = raw.get("strategies", [])
-        if isinstance(data, list):
-            items = data
-
     entries: List[StrategyIndexEntry] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
+
+    # Load from database cache
+    for slug, strategy in _DB_STRATEGIES_CACHE.items():
         try:
-            entry = StrategyIndexEntry.model_validate(item)
-        except Exception:
-            continue
-        if entry.active:
+            # Build index entry from strategy metadata
+            entry = StrategyIndexEntry(
+                slug=slug,
+                title=slug.replace('_', ' ').replace('/', ' - ').title(),
+                category=strategy.meta.category,
+                time_window=strategy.meta.time_window,
+                depth=strategy.meta.depth,
+                description=f"Database strategy: {slug}",
+                priority=10,  # DB strategies get high priority
+                active=True,
+                fan_out="none",
+                required_variables=[]
+            )
             entries.append(entry)
+        except Exception as e:
+            logger.warning(f"Failed to create index entry for DB strategy {slug}: {e}")
+
+    # Load from YAML index file
+    if _INDEX_PATH.exists():
+        raw = yaml.safe_load(_INDEX_PATH.read_text())
+        items = []
+        if isinstance(raw, dict):
+            data = raw.get("strategies", [])
+            if isinstance(data, list):
+                items = data
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                entry = StrategyIndexEntry.model_validate(item)
+            except Exception:
+                continue
+            # Skip file entries if DB has the same slug
+            if entry.slug in _DB_STRATEGIES_CACHE:
+                logger.debug(f"Skipping file-based strategy '{entry.slug}' (overridden by DB)")
+                continue
+            if entry.active:
+                entries.append(entry)
 
     entries.sort(key=lambda e: (e.priority, e.slug))
     _STRATEGY_INDEX_CACHE = entries
     _build_strategy_lookup(entries)
+    logger.info(f"✓ Strategy index loaded: {len(entries)} strategies ({len(_DB_STRATEGIES_CACHE)} from DB)")
     return entries
 
 
@@ -174,10 +253,6 @@ def get_index_entry_by_slug(slug: str) -> Optional[StrategyIndexEntry]:
 
 
 # Loader --------------------------------------------------------------------
-
-_PACKAGE_DIR = Path(__file__).resolve().parent
-_SCHEMA = json.loads((_PACKAGE_DIR / "schema.json").read_text())
-
 
 def _resolve_includes(data: Any) -> Any:
     """Recursively resolve `include:` directives using macros."""
@@ -193,7 +268,17 @@ def _resolve_includes(data: Any) -> Any:
 
 
 def load_strategy(slug: str) -> Strategy:
-    """Load and validate a strategy by slug."""
+    """Load and validate a strategy by slug.
+
+    Checks database cache first, then falls back to YAML file.
+    """
+    # Check database cache first
+    if slug in _DB_STRATEGIES_CACHE:
+        logger.debug(f"Loading strategy '{slug}' from database cache")
+        return _DB_STRATEGIES_CACHE[slug]
+
+    # Fall back to YAML file
+    logger.debug(f"Loading strategy '{slug}' from YAML file")
     path = _PACKAGE_DIR / f"{slug}.yaml"
     raw = yaml.safe_load(path.read_text())
     raw = _resolve_includes(raw)
@@ -222,6 +307,8 @@ __all__ = [
     "StrategyIndexEntry",
     "load_strategy",
     "load_strategy_index",
+    "load_strategies_from_db",
     "get_index_entry_by_slug",
     "select_strategy",
+    "clear_strategy_cache",
 ]

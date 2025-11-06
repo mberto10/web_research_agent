@@ -10,6 +10,8 @@ import sys
 from api.database import get_db, db_manager
 from api import schemas, crud
 from api.webhooks import send_webhook
+from core.config import clear_config_cache
+from strategies import clear_strategy_cache
 
 # Configure logging
 logging.basicConfig(
@@ -423,6 +425,168 @@ async def run_batch_research(tasks: list, callback_url: str):
         logger.info("📊 Traces flushed to Langfuse")
     except Exception as flush_error:
         logger.warning(f"⚠️ Failed to flush traces: {flush_error}")
+
+
+# ============================================================================
+# STRATEGY MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.get(
+    "/api/strategies",
+    response_model=list[schemas.StrategyResponse],
+    tags=["Strategies"]
+)
+async def list_strategies(
+    active_only: bool = True,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_api_key)
+):
+    """List all strategies."""
+    strategies = await crud.list_strategies(db, active_only=active_only)
+    return [s.to_dict() for s in strategies]
+
+
+@app.get(
+    "/api/strategies/{slug}",
+    response_model=schemas.StrategyResponse,
+    tags=["Strategies"]
+)
+async def get_strategy(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_api_key)
+):
+    """Get a single strategy by slug."""
+    strategy = await crud.get_strategy(db, slug)
+    if not strategy:
+        raise HTTPException(status_code=404, detail=f"Strategy '{slug}' not found")
+    return strategy.to_dict()
+
+
+@app.post(
+    "/api/strategies",
+    response_model=schemas.StrategyResponse,
+    status_code=201,
+    tags=["Strategies"]
+)
+async def create_strategy(
+    data: schemas.StrategyCreate,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_api_key)
+):
+    """Create a new strategy."""
+    # Check if slug already exists
+    existing = await crud.get_strategy(db, data.slug)
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Strategy '{data.slug}' already exists")
+
+    strategy = await crud.create_strategy(db, data.slug, data.yaml_content)
+
+    # Clear caches to load new strategy
+    clear_strategy_cache()
+
+    logger.info(f"✓ Created strategy: {data.slug}")
+    return strategy.to_dict()
+
+
+@app.put(
+    "/api/strategies/{slug}",
+    response_model=schemas.StrategyResponse,
+    tags=["Strategies"]
+)
+async def update_strategy(
+    slug: str,
+    data: schemas.StrategyUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_api_key)
+):
+    """Update an existing strategy."""
+    strategy = await crud.update_strategy(db, slug, data.yaml_content)
+    if not strategy:
+        raise HTTPException(status_code=404, detail=f"Strategy '{slug}' not found")
+
+    # Clear caches to reload updated strategy
+    clear_strategy_cache()
+
+    logger.info(f"✓ Updated strategy: {slug}")
+    return strategy.to_dict()
+
+
+@app.delete(
+    "/api/strategies/{slug}",
+    tags=["Strategies"]
+)
+async def delete_strategy(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_api_key)
+):
+    """Delete a strategy."""
+    success = await crud.delete_strategy(db, slug)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Strategy '{slug}' not found")
+
+    # Clear caches to remove deleted strategy
+    clear_strategy_cache()
+
+    logger.info(f"✓ Deleted strategy: {slug}")
+    return {"success": True, "message": f"Strategy '{slug}' deleted"}
+
+
+# ============================================================================
+# GLOBAL SETTINGS ENDPOINTS
+# ============================================================================
+
+@app.get(
+    "/api/settings",
+    response_model=list[schemas.GlobalSettingResponse],
+    tags=["Settings"]
+)
+async def list_settings(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_api_key)
+):
+    """List all global settings."""
+    settings = await crud.list_global_settings(db)
+    return [s.to_dict() for s in settings]
+
+
+@app.get(
+    "/api/settings/{key}",
+    response_model=schemas.GlobalSettingResponse,
+    tags=["Settings"]
+)
+async def get_setting(
+    key: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_api_key)
+):
+    """Get a single setting by key."""
+    setting = await crud.get_global_setting(db, key)
+    if not setting:
+        raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
+    return setting.to_dict()
+
+
+@app.put(
+    "/api/settings/{key}",
+    response_model=schemas.GlobalSettingResponse,
+    tags=["Settings"]
+)
+async def update_setting(
+    key: str,
+    data: schemas.GlobalSettingUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(verify_api_key)
+):
+    """Update or create a global setting."""
+    setting = await crud.update_global_setting(db, key, data.value)
+
+    # Clear config cache to reload updated setting
+    clear_config_cache()
+
+    logger.info(f"✓ Updated setting: {key}")
+    return setting.to_dict()
 
 
 # --- Optional: Parallel Execution (Future Enhancement) ---

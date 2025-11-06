@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from api.database import db_manager
-from api.models import ResearchTask
+from api.models import ResearchTask, ScopeClassification
 
 
 async def init_db():
@@ -24,9 +24,13 @@ async def init_db():
         print("\nDatabase schema initialized!")
         print("\nTables created:")
         print("  - research_tasks")
+        print("  - scope_classifications")
         print("\nIndexes created:")
         print("  - idx_research_tasks_email")
         print("  - idx_research_tasks_active")
+        print("  - idx_scope_request_hash")
+        print("  - idx_scope_expires_at")
+        print("  - idx_scope_strategy_category")
         
     except Exception as e:
         print(f"✗ Error initializing database: {e}")

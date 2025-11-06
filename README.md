@@ -108,6 +108,67 @@ This README describes the current implementation precisely with file references 
 - Add an entry to `strategies/index.yaml` with `slug`, labels, `required_variables`, and `fan_out` policy.
 - Optionally add or adjust prompts in `config/settings.yaml` per node or per strategy.
 
+## Configuration Management API
+
+The system supports **runtime configuration updates** via REST API endpoints, allowing you to create, update, and delete strategies and settings **without redeploying**.
+
+### Database-Backed Configuration
+
+- **Strategies** and **global settings** are stored in PostgreSQL and loaded at startup
+- File-based YAML configurations serve as fallback if database is empty
+- In-memory caching with automatic invalidation on updates
+- Changes take effect immediately (no restart required)
+
+### API Endpoints
+
+**Strategy Management** (requires `X-API-Key` header):
+- `GET /api/strategies` - List all strategies
+- `GET /api/strategies/{slug}` - Get single strategy
+- `POST /api/strategies` - Create new strategy
+- `PUT /api/strategies/{slug}` - Update existing strategy
+- `DELETE /api/strategies/{slug}` - Delete strategy
+
+**Global Settings Management**:
+- `GET /api/settings` - List all settings
+- `GET /api/settings/{key}` - Get setting (e.g., `llm_defaults`, `prompts`)
+- `PUT /api/settings/{key}` - Update LLM configs or prompts
+
+### Quick Example
+
+Update LLM temperature globally:
+```bash
+curl -X PUT \
+  -H "X-API-Key: your-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{"value": {"fill": {"model": "gpt-5-mini", "temperature": 0.5}}}' \
+  https://your-api.com/api/settings/llm_defaults
+```
+
+Create new strategy:
+```bash
+curl -X POST \
+  -H "X-API-Key: your-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug": "my_custom_strategy",
+    "yaml_content": {
+      "meta": {"slug": "my_custom_strategy", "version": 1, "category": "news", "time_window": "week", "depth": "brief"},
+      "queries": {"exa_search": "{{topic}} updates"},
+      "tool_chain": [{"use": "exa.search", "inputs": {"query": "{{topic}}", "num_results": 10}}]
+    }
+  }' \
+  https://your-api.com/api/strategies
+```
+
+### Migration from YAML to Database
+
+Run the migration script to move existing strategies to database:
+```bash
+python scripts/migrate_main_strategies.py
+```
+
+**Documentation**: See `docs/API_CONFIGURATION.md` for complete API reference and examples.
+
 ## Running
 
 ```python
