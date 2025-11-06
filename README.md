@@ -110,14 +110,14 @@ This README describes the current implementation precisely with file references 
 
 ## Configuration Management API
 
-The system supports **runtime configuration updates** via REST API endpoints, allowing you to create, update, and delete strategies and settings **without redeploying**.
+The system supports **configuration updates** via REST API endpoints, allowing you to create, update, and delete strategies and settings in the database.
 
 ### Database-Backed Configuration
 
-- **Strategies** and **global settings** are stored in PostgreSQL and loaded at startup
-- File-based YAML configurations serve as fallback if database is empty
-- In-memory caching with automatic invalidation on updates
-- Changes take effect immediately (no restart required)
+- **Strategies** and **global settings** are stored in PostgreSQL and **loaded at startup**
+- **Database-first mode**: Application requires database to be populated (no YAML fallback)
+- Configuration loaded into memory at startup for fast access
+- **Changes require application restart to take effect**
 
 ### API Endpoints
 
@@ -162,10 +162,17 @@ curl -X POST \
 
 ### Migration from YAML to Database
 
-Run the migration script to move existing strategies to database:
+**REQUIRED**: The application will fail to start if the database is empty. Run the migration script to populate the database:
 ```bash
 python scripts/migrate_main_strategies.py
 ```
+
+The migration script:
+- Loads strategies from YAML files in `strategies/` directory
+- Creates database records for each strategy
+- Populates global settings (`llm_defaults` and `prompts`)
+
+**Note**: After migration, YAML files are no longer used at runtime. All configuration is loaded from the database.
 
 **Documentation**: See `docs/API_CONFIGURATION.md` for complete API reference and examples.
 

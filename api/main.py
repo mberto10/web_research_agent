@@ -1,17 +1,19 @@
 """Research Agent API - Subscription management + batch execution."""
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from datetime import datetime
 from uuid import UUID
 import os
 import logging
 import sys
+from contextlib import asynccontextmanager
 
 from api.database import get_db, db_manager
 from api import schemas, crud
 from api.webhooks import send_webhook
-from core.config import clear_config_cache
-from strategies import clear_strategy_cache
+from core.config import load_config_from_db
+from strategies import load_strategies_from_db
 
 # Configure logging
 logging.basicConfig(
@@ -21,10 +23,87 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application startup and shutdown lifecycle."""
+    # Startup
+    logger.info("=" * 60)
+    logger.info("🚀 Starting Research Agent API - Database-First Mode")
+    logger.info("=" * 60)
+
+    # Use session directly for startup initialization
+    async with db_manager.async_session_maker() as db:
+        try:
+            # Test database connectivity first
+            logger.info("🔌 Testing database connectivity...")
+            await db.execute(text("SELECT 1"))
+            logger.info("✅ Database connection verified")
+
+            # Load strategies from database
+            logger.info("📚 Loading strategies from database...")
+            strategies = await load_strategies_from_db(db)
+
+            if not strategies:
+                logger.error("❌ FATAL: No strategies found in database")
+                raise RuntimeError(
+                    "Database empty - migration required. "
+                    "Run: python scripts/migrate_main_strategies.py"
+                )
+
+            logger.info(f"✅ Loaded {len(strategies)} strategies from database")
+
+            # Load configuration from database
+            logger.info("⚙️ Loading configuration from database...")
+            config = await load_config_from_db(db)
+
+            if not config:
+                logger.error("❌ FATAL: No configuration found in database")
+                raise RuntimeError(
+                    "Global settings are required but not found in database. "
+                    "Please ensure 'llm_defaults' and 'prompts' settings exist."
+                )
+
+            logger.info("✅ Loaded configuration from database")
+            logger.info("=" * 60)
+            logger.info("✅ Database initialization complete - Ready to serve requests")
+            logger.info("=" * 60)
+
+        except ConnectionError as conn_err:
+            logger.error("=" * 60)
+            logger.error("❌ FATAL: Cannot connect to database")
+            logger.error("   Check your DATABASE_URL environment variable")
+            logger.error(f"   Error: {conn_err}")
+            logger.error("=" * 60)
+            raise RuntimeError(f"Database connection failed: {conn_err}")
+
+        except RuntimeError as runtime_err:
+            # These are our explicit errors (empty DB, etc)
+            logger.error("=" * 60)
+            logger.error(f"❌ FATAL: {runtime_err}")
+            logger.error("=" * 60)
+            raise
+
+        except Exception as e:
+            logger.error("=" * 60)
+            logger.error("❌ FATAL: Unexpected error during database initialization")
+            logger.error("   This may indicate corrupt data or configuration issues")
+            logger.error(f"   Error: {e}")
+            logger.error("=" * 60)
+            raise RuntimeError(f"Database initialization failed: {e}")
+
+    yield  # Application runs
+
+    # Shutdown
+    logger.info("👋 Shutting down Research Agent API...")
+    await db_manager.close()
+
+
 app = FastAPI(
     title="Research Agent API",
     description="Manage research subscriptions and execute batch briefings",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # --- Authentication ---
@@ -482,10 +561,8 @@ async def create_strategy(
 
     strategy = await crud.create_strategy(db, data.slug, data.yaml_content)
 
-    # Clear caches to load new strategy
-    clear_strategy_cache()
-
     logger.info(f"✓ Created strategy: {data.slug}")
+    logger.warning("⚠️ Configuration updated. Restart application to apply changes.")
     return strategy.to_dict()
 
 
@@ -505,10 +582,8 @@ async def update_strategy(
     if not strategy:
         raise HTTPException(status_code=404, detail=f"Strategy '{slug}' not found")
 
-    # Clear caches to reload updated strategy
-    clear_strategy_cache()
-
     logger.info(f"✓ Updated strategy: {slug}")
+    logger.warning("⚠️ Configuration updated. Restart application to apply changes.")
     return strategy.to_dict()
 
 
@@ -526,10 +601,8 @@ async def delete_strategy(
     if not success:
         raise HTTPException(status_code=404, detail=f"Strategy '{slug}' not found")
 
-    # Clear caches to remove deleted strategy
-    clear_strategy_cache()
-
     logger.info(f"✓ Deleted strategy: {slug}")
+    logger.warning("⚠️ Configuration updated. Restart application to apply changes.")
     return {"success": True, "message": f"Strategy '{slug}' deleted"}
 
 
@@ -582,10 +655,8 @@ async def update_setting(
     """Update or create a global setting."""
     setting = await crud.update_global_setting(db, key, data.value)
 
-    # Clear config cache to reload updated setting
-    clear_config_cache()
-
     logger.info(f"✓ Updated setting: {key}")
+    logger.warning("⚠️ Configuration updated. Restart application to apply changes.")
     return setting.to_dict()
 
 

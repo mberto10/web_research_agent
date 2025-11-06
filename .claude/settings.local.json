@@ -46,7 +46,9 @@
       "Bash(git commit:*)",
       "Bash(git config:*)",
       "Bash(mkdir:*)",
-      "mcp__linear-server__list_comments"
+      "mcp__linear-server__list_comments",
+      "mcp__linear-server__list_issue_statuses",
+      "mcp__linear-server__list_projects"
     ],
     "deny": [],
     "ask": []

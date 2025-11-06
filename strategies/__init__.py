@@ -182,9 +182,9 @@ def _build_strategy_lookup(entries: List[StrategyIndexEntry]) -> None:
 
 
 def load_strategy_index(refresh: bool = False) -> List[StrategyIndexEntry]:
-    """Load the strategy index from database cache and disk, merging both.
+    """Load the strategy index from database cache only.
 
-    Database strategies take precedence over file-based strategies.
+    Cache must be populated via load_strategies_from_db() during startup.
     """
 
     global _STRATEGY_INDEX_CACHE
@@ -193,7 +193,7 @@ def load_strategy_index(refresh: bool = False) -> List[StrategyIndexEntry]:
 
     entries: List[StrategyIndexEntry] = []
 
-    # Load from database cache
+    # Load from database cache only
     for slug, strategy in _DB_STRATEGIES_CACHE.items():
         try:
             # Build index entry from strategy metadata
@@ -204,7 +204,7 @@ def load_strategy_index(refresh: bool = False) -> List[StrategyIndexEntry]:
                 time_window=strategy.meta.time_window,
                 depth=strategy.meta.depth,
                 description=f"Database strategy: {slug}",
-                priority=10,  # DB strategies get high priority
+                priority=10,
                 active=True,
                 fan_out="none",
                 required_variables=[]
@@ -213,33 +213,17 @@ def load_strategy_index(refresh: bool = False) -> List[StrategyIndexEntry]:
         except Exception as e:
             logger.warning(f"Failed to create index entry for DB strategy {slug}: {e}")
 
-    # Load from YAML index file
-    if _INDEX_PATH.exists():
-        raw = yaml.safe_load(_INDEX_PATH.read_text())
-        items = []
-        if isinstance(raw, dict):
-            data = raw.get("strategies", [])
-            if isinstance(data, list):
-                items = data
-
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            try:
-                entry = StrategyIndexEntry.model_validate(item)
-            except Exception:
-                continue
-            # Skip file entries if DB has the same slug
-            if entry.slug in _DB_STRATEGIES_CACHE:
-                logger.debug(f"Skipping file-based strategy '{entry.slug}' (overridden by DB)")
-                continue
-            if entry.active:
-                entries.append(entry)
+    if not entries:
+        raise RuntimeError(
+            "No strategies loaded from database. "
+            "Database must be populated first. "
+            "Please run: python scripts/migrate_main_strategies.py"
+        )
 
     entries.sort(key=lambda e: (e.priority, e.slug))
     _STRATEGY_INDEX_CACHE = entries
     _build_strategy_lookup(entries)
-    logger.info(f"✓ Strategy index loaded: {len(entries)} strategies ({len(_DB_STRATEGIES_CACHE)} from DB)")
+    logger.info(f"✓ Strategy index loaded: {len(entries)} strategies from database")
     return entries
 
 
@@ -270,20 +254,20 @@ def _resolve_includes(data: Any) -> Any:
 def load_strategy(slug: str) -> Strategy:
     """Load and validate a strategy by slug.
 
-    Checks database cache first, then falls back to YAML file.
+    Only loads from database cache. Cache must be populated at startup.
     """
-    # Check database cache first
+    # Check database cache
     if slug in _DB_STRATEGIES_CACHE:
         logger.debug(f"Loading strategy '{slug}' from database cache")
         return _DB_STRATEGIES_CACHE[slug]
 
-    # Fall back to YAML file
-    logger.debug(f"Loading strategy '{slug}' from YAML file")
-    path = _PACKAGE_DIR / f"{slug}.yaml"
-    raw = yaml.safe_load(path.read_text())
-    raw = _resolve_includes(raw)
-    validate(instance=raw, schema=_SCHEMA)
-    return Strategy.model_validate(raw)
+    # Strategy not found in database
+    available = list(_DB_STRATEGIES_CACHE.keys())
+    raise ValueError(
+        f"Strategy '{slug}' not found in database cache. "
+        f"Available strategies: {available}. "
+        f"Please ensure the strategy exists in the database."
+    )
 
 
 # Selector ------------------------------------------------------------------
