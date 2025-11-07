@@ -68,7 +68,8 @@
       "Bash(else echo \"✗ LINEAR_API_KEY is not set\")",
       "Skill(linear-agent)",
       "Bash(pkill:*)",
-      "Bash(/tmp/call_admin_endpoint.sh)"
+      "Bash(/tmp/call_admin_endpoint.sh)",
+      "Bash(/tmp/trigger_batch.sh)"
     ],
     "deny": [],
     "ask": []
