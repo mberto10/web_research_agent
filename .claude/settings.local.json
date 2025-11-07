@@ -48,7 +48,20 @@
       "Bash(mkdir:*)",
       "mcp__linear-server__list_comments",
       "mcp__linear-server__list_issue_statuses",
-      "mcp__linear-server__list_projects"
+      "mcp__linear-server__list_projects",
+      "Bash(chmod:*)",
+      "Bash(if [ -n \"$API_SECRET_KEY\" ])",
+      "Bash(then echo \"✓ API_SECRET_KEY is set\")",
+      "Bash(else echo \"✗ API_SECRET_KEY is not set\")",
+      "Bash(curl:*)",
+      "Bash(env)",
+      "Bash(python3 api_client.py:*)",
+      "Bash(python3:*)",
+      "Bash(while read commit msg)",
+      "Bash(do if git show $commit:core/graph.py)",
+      "Bash(then echo \"$commit HAS qc: $msg\")",
+      "Bash(else echo \"$commit NO qc: $msg\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

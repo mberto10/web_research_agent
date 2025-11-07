@@ -43,6 +43,14 @@ class ResearchTask(Base):
     __table_args__ = (
         Index("idx_research_tasks_email", "email"),
         Index("idx_research_tasks_active", "is_active"),
+        Index(
+            "idx_unique_task",
+            "email",
+            "research_topic",
+            "frequency",
+            unique=True,
+            postgresql_where=text("is_active = true"),
+        ),
     )
     
     def __repr__(self):

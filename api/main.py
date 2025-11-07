@@ -4,9 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from datetime import datetime
 from uuid import UUID
+from pydantic import EmailStr
 import os
 import logging
 import sys
+import secrets
 from contextlib import asynccontextmanager
 
 from api.database import get_db, db_manager
@@ -108,8 +110,10 @@ app = FastAPI(
 
 # --- Authentication ---
 
-API_KEY = os.getenv("API_SECRET_KEY", "dev-key-change-in-prod")
-logger.info(f"🔑 API Key loaded: {API_KEY[:8]}... (length: {len(API_KEY)})")
+API_KEY = os.getenv("API_SECRET_KEY")
+if not API_KEY:
+    raise ValueError("API_SECRET_KEY environment variable must be set")
+logger.info("🔑 API Key loaded: ***REDACTED*** (configured)")
 
 # Check critical environment variables
 REQUIRED_ENV_VARS = [
@@ -119,17 +123,23 @@ REQUIRED_ENV_VARS = [
     "OPENAI_API_KEY"
 ]
 
+missing_vars = []
 for var in REQUIRED_ENV_VARS:
     value = os.getenv(var)
     if value:
-        logger.info(f"✅ {var}: {value[:8]}... (length: {len(value)})")
+        logger.info(f"✅ {var}: ***REDACTED***")
     else:
-        logger.warning(f"⚠️ {var}: NOT SET")
+        logger.error(f"❌ {var}: NOT SET")
+        missing_vars.append(var)
+
+# Fail fast if any required environment variables are missing
+if missing_vars:
+    raise ValueError(f"Required environment variables not set: {', '.join(missing_vars)}")
 
 
 async def verify_api_key(x_api_key: str = Header(...)):
     """Verify API key from header."""
-    if x_api_key != API_KEY:
+    if not secrets.compare_digest(x_api_key, API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API key")
     return x_api_key
 
@@ -183,13 +193,13 @@ async def create_task(
     summary="Get tasks by email"
 )
 async def get_tasks(
-    email: str,
+    email: EmailStr,
     db: AsyncSession = Depends(get_db)
 ):
     """Get all research tasks for a specific email.
 
     Args:
-        email: User email address
+        email: User email address (must be valid email format)
 
     Returns:
         List of tasks for the email

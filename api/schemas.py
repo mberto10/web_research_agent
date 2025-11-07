@@ -1,22 +1,40 @@
 """Pydantic schemas for request/response validation."""
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Literal
+
+# Type alias for frequency validation
+Frequency = Literal["daily", "weekly", "monthly"]
 
 
 class TaskCreate(BaseModel):
     """Schema for creating a new research task."""
     email: EmailStr
-    research_topic: str
-    frequency: str  # "daily", "weekly", "monthly"
-    schedule_time: str = "09:00"
+    research_topic: str = Field(
+        max_length=500,
+        description="Research topic (max 500 characters)"
+    )
+    frequency: Frequency
+    schedule_time: str = Field(
+        default="09:00",
+        pattern=r"^([01]\d|2[0-3]):([0-5]\d)$",
+        description="Time in HH:MM format (00:00 to 23:59)"
+    )
 
 
 class TaskUpdate(BaseModel):
     """Schema for updating an existing task."""
-    research_topic: str | None = None
-    frequency: str | None = None
-    schedule_time: str | None = None
+    research_topic: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Research topic (max 500 characters)"
+    )
+    frequency: Frequency | None = None
+    schedule_time: str | None = Field(
+        default=None,
+        pattern=r"^([01]\d|2[0-3]):([0-5]\d)$",
+        description="Time in HH:MM format (00:00 to 23:59)"
+    )
     is_active: bool | None = None
 
 
@@ -25,7 +43,7 @@ class TaskResponse(BaseModel):
     id: str
     email: str
     research_topic: str
-    frequency: str
+    frequency: Frequency
     schedule_time: str
     is_active: bool
     created_at: str
@@ -34,14 +52,14 @@ class TaskResponse(BaseModel):
 
 class BatchExecuteRequest(BaseModel):
     """Schema for batch execution request."""
-    frequency: str  # "daily", "weekly", "monthly"
+    frequency: Frequency
     callback_url: str
 
 
 class BatchExecuteResponse(BaseModel):
     """Schema for batch execution response."""
     status: str
-    frequency: str
+    frequency: Frequency
     tasks_found: int
     started_at: str
 

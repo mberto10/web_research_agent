@@ -119,6 +119,7 @@ _INDEX_PATH = _PACKAGE_DIR / "index.yaml"
 _STRATEGY_INDEX_CACHE: Optional[List[StrategyIndexEntry]] = None
 _STRATEGY_LOOKUP_CACHE: Dict[Tuple[str, str, str], StrategyIndexEntry] = {}
 _DB_STRATEGIES_CACHE: Dict[str, Strategy] = {}  # Cache for DB-loaded strategies
+_CACHES_INITIALIZED: bool = False  # Flag to enforce immutability after startup
 
 
 async def load_strategies_from_db(db_session) -> Dict[str, Strategy]:
@@ -127,7 +128,10 @@ async def load_strategies_from_db(db_session) -> Dict[str, Strategy]:
     Returns dict mapping slug -> Strategy.
     Populates the global _DB_STRATEGIES_CACHE.
     """
-    global _DB_STRATEGIES_CACHE
+    global _DB_STRATEGIES_CACHE, _CACHES_INITIALIZED
+
+    if _CACHES_INITIALIZED:
+        raise RuntimeError("Strategy caches are immutable after initialization. Restart application to reload strategies.")
 
     try:
         from api.crud import list_strategies
@@ -143,7 +147,8 @@ async def load_strategies_from_db(db_session) -> Dict[str, Strategy]:
                 strategy = Strategy.model_validate(yaml_content)
                 result[db_strat.slug] = strategy
             except Exception as e:
-                logger.warning(f"Failed to parse strategy {db_strat.slug} from DB: {e}")
+                logger.error(f"Failed to parse strategy {db_strat.slug} from DB: {e}")
+                raise RuntimeError(f"Invalid strategy '{db_strat.slug}' in database. Fix the strategy data before starting the application.") from e
 
         _DB_STRATEGIES_CACHE = result
         logger.info(f"✓ Loaded {len(result)} strategies from database")
@@ -157,19 +162,24 @@ async def load_strategies_from_db(db_session) -> Dict[str, Strategy]:
 def clear_strategy_cache():
     """Clear all strategy caches.
 
-    Call this after creating/updating/deleting strategies in the database.
+    WARNING: This is intended for testing only. In production, strategy changes
+    require an application restart. Clears the immutability flag to allow re-initialization.
     """
-    global _STRATEGY_INDEX_CACHE, _STRATEGY_LOOKUP_CACHE, _DB_STRATEGIES_CACHE
+    global _STRATEGY_INDEX_CACHE, _STRATEGY_LOOKUP_CACHE, _DB_STRATEGIES_CACHE, _CACHES_INITIALIZED
     _STRATEGY_INDEX_CACHE = None
     _STRATEGY_LOOKUP_CACHE.clear()
     _DB_STRATEGIES_CACHE.clear()
+    _CACHES_INITIALIZED = False  # Reset immutability flag for re-initialization
     logger.debug("Strategy caches cleared")
 
 
 def _build_strategy_lookup(entries: List[StrategyIndexEntry]) -> None:
     """Populate the tuple lookup cache from index entries."""
 
-    global _STRATEGY_LOOKUP_CACHE
+    global _STRATEGY_LOOKUP_CACHE, _CACHES_INITIALIZED
+
+    if _CACHES_INITIALIZED:
+        raise RuntimeError("Strategy caches are immutable after initialization. Restart application to reload strategies.")
     lookup: Dict[Tuple[str, str, str], StrategyIndexEntry] = {}
     for entry in entries:
         if not entry.active:
@@ -185,29 +195,56 @@ def load_strategy_index(refresh: bool = False) -> List[StrategyIndexEntry]:
     """Load the strategy index from database cache only.
 
     Cache must be populated via load_strategies_from_db() during startup.
+    Extracts fan_out and required_variables metadata from index.yaml.
     """
 
-    global _STRATEGY_INDEX_CACHE
+    global _STRATEGY_INDEX_CACHE, _CACHES_INITIALIZED
+
+    if _CACHES_INITIALIZED and refresh:
+        raise RuntimeError("Strategy caches are immutable after initialization. Restart application to reload strategies.")
+
     if _STRATEGY_INDEX_CACHE is not None and not refresh:
         return _STRATEGY_INDEX_CACHE
 
     entries: List[StrategyIndexEntry] = []
 
+    # Load index.yaml to get metadata (fan_out, required_variables, etc.)
+    index_metadata = {}
+    try:
+        if _INDEX_PATH.exists():
+            raw_index = yaml.safe_load(_INDEX_PATH.read_text())
+            if raw_index and "strategies" in raw_index:
+                for entry in raw_index["strategies"]:
+                    index_metadata[entry["slug"]] = entry
+    except Exception as e:
+        logger.warning(f"Failed to load index.yaml metadata: {e}")
+
     # Load from database cache only
     for slug, strategy in _DB_STRATEGIES_CACHE.items():
         try:
+            # Get metadata from index.yaml if available
+            metadata = index_metadata.get(slug, {})
+
+            # Extract fan_out and required_variables from metadata
+            fan_out = metadata.get("fan_out", "none")
+            required_vars = []
+            if "required_variables" in metadata:
+                for var in metadata["required_variables"]:
+                    if isinstance(var, dict) and "name" in var:
+                        required_vars.append(StrategyVariable(**var))
+
             # Build index entry from strategy metadata
             entry = StrategyIndexEntry(
                 slug=slug,
-                title=slug.replace('_', ' ').replace('/', ' - ').title(),
+                title=metadata.get("title", slug.replace('_', ' ').replace('/', ' - ').title()),
                 category=strategy.meta.category,
                 time_window=strategy.meta.time_window,
                 depth=strategy.meta.depth,
-                description=f"Database strategy: {slug}",
-                priority=10,
+                description=metadata.get("description", f"Database strategy: {slug}"),
+                priority=metadata.get("priority", 10),
                 active=True,
-                fan_out="none",
-                required_variables=[]
+                fan_out=fan_out,
+                required_variables=required_vars
             )
             entries.append(entry)
         except Exception as e:
@@ -223,6 +260,7 @@ def load_strategy_index(refresh: bool = False) -> List[StrategyIndexEntry]:
     entries.sort(key=lambda e: (e.priority, e.slug))
     _STRATEGY_INDEX_CACHE = entries
     _build_strategy_lookup(entries)
+    _CACHES_INITIALIZED = True  # Mark caches as immutable after successful initialization
     logger.info(f"✓ Strategy index loaded: {len(entries)} strategies from database")
     return entries
 

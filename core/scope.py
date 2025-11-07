@@ -168,7 +168,7 @@ def _ensure_variables(
         name = var.name
         if not name:
             continue
-        if name not in variables or not variables[name].strip():
+        if name not in variables or (isinstance(variables[name], str) and not variables[name].strip()):
             if name == "topic":
                 variables[name] = first_task or fallback_value
             else:

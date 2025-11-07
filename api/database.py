@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool
 
 
 class Base(DeclarativeBase):
@@ -59,7 +58,8 @@ class DatabaseManager:
         self.engine = create_async_engine(
             self.database_url,
             echo=False,
-            poolclass=NullPool,
+            pool_size=20,
+            max_overflow=10,
             pool_pre_ping=True,
             connect_args=connect_args,
         )
@@ -73,10 +73,7 @@ class DatabaseManager:
     async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
         """Get an async database session."""
         async with self.async_session_maker() as session:
-            try:
-                yield session
-            finally:
-                await session.close()
+            yield session
     
     async def create_all_tables(self):
         """Create all tables in the database."""
