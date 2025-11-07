@@ -414,7 +414,7 @@ async def run_batch_research(tasks: list, callback_url: str):
                 }
             ) as trace_ctx:
                 config = {"configurable": {"thread_id": str(task.id)}}
-                result = graph.invoke(State(user_request=task.research_topic), config)
+                result = await graph.ainvoke(State(user_request=task.research_topic), config)
 
                 # Update trace with successful completion
                 trace_ctx.update_trace(

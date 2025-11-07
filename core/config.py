@@ -32,7 +32,7 @@ def _default_config() -> Dict[str, Any]:
                 "analyzer": {"model": "gpt-4o-mini", "temperature": 0.3},
                 "cluster": {"model": "gpt-4o-mini", "temperature": 0.2},
                 "nodes": {
-                    "scope_classifier": {"model": "gpt-4o-mini", "temperature": 0},
+                    "scope_classifier": {"model": "gpt-4o-mini", "temperature": 1},
                     "query_refiner": {"model": "gpt-4o-mini", "temperature": 0},
                     "finalize_react": {"model": "gpt-4o-mini", "temperature": 0},
                     "llm_analyzer": {"model": "gpt-4o-mini", "temperature": 0.3},

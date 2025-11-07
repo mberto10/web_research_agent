@@ -36,7 +36,7 @@ llm:
       # Controls the scope classifier LLM in `core/scope._llm_scope`
       scope_classifier:
         model: gpt-5-mini
-        temperature: 0
+        temperature: 1
       # Used by `_refine_queries_with_llm` to propose follow-up searches
       query_refiner:
         model: gpt-5-mini

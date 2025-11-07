@@ -62,7 +62,12 @@
       "Bash(then echo \"$commit HAS qc: $msg\")",
       "Bash(else echo \"$commit NO qc: $msg\")",
       "Bash(done)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(if [ -n \"$LINEAR_API_KEY\" ])",
+      "Bash(then echo \"✓ LINEAR_API_KEY is set\")",
+      "Bash(else echo \"✗ LINEAR_API_KEY is not set\")",
+      "Skill(linear-agent)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []
