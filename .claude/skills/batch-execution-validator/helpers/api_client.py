@@ -62,7 +62,7 @@ def trigger_batch_execution(
     endpoint = f"{api_url.rstrip('/')}/execute/batch"
 
     headers = {
-        'X-Api-Key': api_key,
+        'X-API-Key': api_key,
         'Content-Type': 'application/json'
     }
 
@@ -110,7 +110,7 @@ def get_tasks_by_email(api_url: str, api_key: str, email: str) -> List[Dict[str,
     endpoint = f"{api_url.rstrip('/')}/tasks"
 
     headers = {
-        'X-Api-Key': api_key,
+        'X-API-Key': api_key,
         'Content-Type': 'application/json'
     }
 

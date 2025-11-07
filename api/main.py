@@ -14,8 +14,11 @@ from contextlib import asynccontextmanager
 from api.database import get_db, db_manager
 from api import schemas, crud
 from api.webhooks import send_webhook
-from core.config import load_config_from_db
+from core.config import load_config_from_db, clear_config_cache
 from strategies import load_strategies_from_db
+from api.models import GlobalSetting
+from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 # Configure logging
 logging.basicConfig(
@@ -154,6 +157,74 @@ async def health():
         "timestamp": datetime.utcnow().isoformat(),
         "service": "research-agent-api"
     }
+
+
+# --- Admin Endpoints ---
+
+@app.post(
+    "/admin/update-temperature",
+    dependencies=[Depends(verify_api_key)],
+    summary="Update scope_classifier temperature to 1"
+)
+async def update_temperature(db: AsyncSession = Depends(get_db)):
+    """Admin endpoint to update scope_classifier temperature configuration.
+
+    Updates the database llm_defaults setting to set scope_classifier temperature to 1,
+    which is required for gpt-5-mini model compatibility.
+
+    Returns:
+        Status message with old and new temperature values
+    """
+    try:
+        # Get llm_defaults config from database
+        result = await db.execute(
+            select(GlobalSetting).where(GlobalSetting.key == 'llm_defaults')
+        )
+        setting = result.scalars().first()
+
+        if not setting:
+            raise HTTPException(
+                status_code=404,
+                detail="No 'llm_defaults' configuration found in database"
+            )
+
+        # Check current temperature
+        old_temp = None
+        if 'nodes' in setting.value and 'scope_classifier' in setting.value['nodes']:
+            old_temp = setting.value['nodes']['scope_classifier'].get('temperature')
+
+        # Update temperature to 1
+        if 'nodes' not in setting.value:
+            setting.value['nodes'] = {}
+        if 'scope_classifier' not in setting.value['nodes']:
+            setting.value['nodes']['scope_classifier'] = {}
+
+        setting.value['nodes']['scope_classifier']['temperature'] = 1
+
+        # Mark as modified for SQLAlchemy JSON tracking
+        flag_modified(setting, 'value')
+
+        # Commit to database
+        await db.commit()
+
+        # Clear config cache to force reload
+        clear_config_cache()
+
+        logger.info(f"✅ Updated scope_classifier temperature: {old_temp} → 1")
+
+        return {
+            "status": "success",
+            "message": "Temperature updated successfully",
+            "old_temperature": old_temp,
+            "new_temperature": 1,
+            "note": "Config cache cleared. Changes will take effect immediately."
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Failed to update temperature: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update temperature: {str(e)}")
 
 
 # --- Subscription Management Endpoints ---
