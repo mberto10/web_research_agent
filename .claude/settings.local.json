@@ -69,7 +69,9 @@
       "Skill(linear-agent)",
       "Bash(pkill:*)",
       "Bash(/tmp/call_admin_endpoint.sh)",
-      "Bash(/tmp/trigger_batch.sh)"
+      "Bash(/tmp/trigger_batch.sh)",
+      "Skill(langfuse-advanced-filters)",
+      "Bash(/tmp/fetch_strategies.sh)"
     ],
     "deny": [],
     "ask": []
