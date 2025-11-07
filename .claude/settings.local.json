@@ -61,7 +61,8 @@
       "Bash(do if git show $commit:core/graph.py)",
       "Bash(then echo \"$commit HAS qc: $msg\")",
       "Bash(else echo \"$commit NO qc: $msg\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []
