@@ -247,11 +247,12 @@ def _heuristic_scope(request: str, max_tasks: int) -> Dict[str, Any]:
     }
 
 
+@observe(as_type="generation", name="scope-classification-llm")
 def _llm_scope(request: str) -> Optional[Dict[str, Any]]:
     """Try to use an LLM to scope a request. Returns None on failure.
 
-    NOTE: This is an internal implementation function. Tracing happens at the
-    categorize_request() level to avoid duplicate traces.
+    This function makes the actual LLM call for strategy classification.
+    Tracing is handled via @observe decorator.
     """
     try:  # Import inside the function so the dependency is optional.
         from openai import OpenAI  # type: ignore
@@ -431,7 +432,7 @@ async def split_tasks(request: str, max_tasks: int = DEFAULT_MAX_TASKS) -> List[
     return result["tasks"]
 
 
-@observe(as_type="generation", name="scope-request")
+@observe(as_type="span", capture_input=False, capture_output=False, name="scope-request")
 async def scope_request(
     request: str,
     max_tasks: int = DEFAULT_MAX_TASKS,
@@ -463,7 +464,7 @@ async def scope_request(
 
     # Log input for tracing
     if lf_client:
-        lf_client.update_current_generation(
+        lf_client.update_current_span(
             input={"request": request, "max_tasks": max_tasks},
             metadata={"component": "scope_request"}
         )
@@ -475,7 +476,7 @@ async def scope_request(
             if cached:
                 logger.info(f"✅ SCOPE: Cache hit for: {request[:50]}...")
                 if lf_client:
-                    lf_client.update_current_generation(
+                    lf_client.update_current_span(
                         output=cached,
                         metadata={"source": "cache", "cache_hit": True}
                     )
@@ -492,7 +493,7 @@ async def scope_request(
         error_msg = "LLM classification failed. Check OPENAI_API_KEY and configuration."
         logger.error(f"❌ SCOPE: {error_msg}")
         if lf_client:
-            lf_client.update_current_generation(
+            lf_client.update_current_span(
                 output={"error": error_msg},
                 metadata={"source": "llm_failed"}
             )
@@ -523,7 +524,7 @@ async def scope_request(
             logger.warning(f"⚠️ SCOPE: Cache storage failed: {e}")
 
     if lf_client:
-        lf_client.update_current_generation(
+        lf_client.update_current_span(
             output=result,
             metadata={
                 "source": "llm",

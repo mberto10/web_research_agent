@@ -763,6 +763,71 @@ def research(state: State) -> State:
     return state
 
 
+@observe(as_type="generation", name="batch-fill-llm")
+def _batch_fill_llm(fill_requests: List[Dict[str, Any]], model: str = "gpt-4o-mini") -> Dict[str, Any]:
+    """Batched LLM call to fill inputs for all strategy steps.
+
+    Args:
+        fill_requests: List of fill request dicts with step_name, description, and keys
+        model: OpenAI model to use for the fill call
+
+    Returns:
+        Dict mapping step names to filled values: {step_name: {key: value, ...}}
+    """
+    from openai import OpenAI
+    import os
+    import json
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        logger.warning("⚠️ FILL: No OPENAI_API_KEY, skipping batched fill")
+        return {}
+
+    client = OpenAI(api_key=api_key)
+    lf_client = get_langfuse_client()
+
+    # Build prompt with all steps
+    prompt = "Fill inputs for these research steps. Return JSON object with structure: {step_name: {key: value, ...}}.\n\nSteps:\n"
+    for req in fill_requests:
+        prompt += f"- {req['step_name']}: Fill keys {req['keys']} for: {req['description']}\n"
+
+    # Track input
+    if lf_client:
+        lf_client.update_current_generation(
+            model=model,
+            input={"prompt": prompt, "fill_requests": fill_requests},
+            metadata={"component": "batch_fill", "steps_count": len(fill_requests)}
+        )
+
+    # Make LLM call
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"},
+    )
+
+    content = response.choices[0].message.content
+    batch_results = json.loads(content)
+
+    # Track output + tokens
+    if lf_client:
+        usage = getattr(response, "usage", None)
+        usage_details = None
+        if usage:
+            usage_details = {
+                "input_tokens": getattr(usage, "prompt_tokens", None) or getattr(usage, "promptTokens", None),
+                "output_tokens": getattr(usage, "completion_tokens", None) or getattr(usage, "completionTokens", None),
+                "total_tokens": getattr(usage, "total_tokens", None) or getattr(usage, "totalTokens", None),
+            }
+        lf_client.update_current_generation(
+            output=batch_results,
+            usage_details=usage_details,
+        )
+
+    logger.info(f"✅ FILL: Batched LLM fill for {len(fill_requests)} steps")
+    return batch_results
+
+
 @observe(as_type="span", capture_input=False, capture_output=False, name="fill-phase")
 def fill(state: State) -> State:
     """Fill phase: ask an LLM to provide values for whitelisted inputs per step.
@@ -881,28 +946,7 @@ def fill(state: State) -> State:
     batch_results = {}
     if fill_requests:
         try:
-            from openai import OpenAI
-            import os
-            import json
-
-            api_key = os.getenv("OPENAI_API_KEY")
-            if api_key:
-                client = OpenAI(api_key=api_key)
-
-                # Build prompt with all steps
-                prompt = "Fill inputs for these research steps. Return JSON object with structure: {step_name: {key: value, ...}}.\n\nSteps:\n"
-                for req in fill_requests:
-                    prompt += f"- {req['step_name']}: Fill keys {req['keys']} for: {req['description']}\n"
-
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_object"},
-                )
-
-                content = response.choices[0].message.content
-                batch_results = json.loads(content)
-                logger.info(f"✅ FILL: Batched LLM fill for {len(fill_requests)} steps")
+            batch_results = _batch_fill_llm(fill_requests, model="gpt-4o-mini")
         except Exception as e:
             logger.warning(f"⚠️ FILL: Batch LLM fill failed: {e}")
 
@@ -1172,6 +1216,148 @@ def finalize(state: State) -> State:
     return state
 
 
+@observe(as_type="generation", name="finalize-analysis-llm")
+def _finalize_analysis_llm(
+    system_prompt: str,
+    analysis_prompt: str,
+    tools_payload: List[Dict[str, Any]],
+    model: str,
+    call_kwargs: Dict[str, Any],
+    topic: str,
+    instructions: str,
+) -> Any:
+    """ReAct analysis: Determine if tools are needed before writing report.
+
+    This is the first LLM call in the ReAct pattern. It analyzes the available
+    evidence and decides whether to call tools for additional information.
+
+    Args:
+        system_prompt: System message for the LLM
+        analysis_prompt: User prompt with evidence and instructions
+        tools_payload: Available tools (exa_answer, exa_search, sonar_call)
+        model: OpenAI model to use
+        call_kwargs: Additional kwargs for the completion call
+        topic: Research topic for metadata
+        instructions: Report instructions for metadata
+
+    Returns:
+        OpenAI response object with message and usage data
+    """
+    from openai import OpenAI
+
+    client = OpenAI()
+    lf_client = get_langfuse_client()
+
+    # Track input
+    if lf_client:
+        lf_client.update_current_generation(
+            model=model,
+            input={
+                "analysis_prompt": analysis_prompt,
+                "instructions": instructions,
+                "topic": topic,
+            },
+            metadata={"component": "finalize_react_analysis", "tools_available": len(tools_payload)}
+        )
+
+    # Make LLM call
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": analysis_prompt},
+        ],
+        tools=tools_payload,
+        tool_choice="auto",
+        **call_kwargs,
+    )
+
+    message = response.choices[0].message
+
+    # Track output + tokens
+    if lf_client:
+        usage = getattr(response, "usage", None)
+        usage_details = None
+        if usage:
+            usage_details = {
+                "input_tokens": getattr(usage, "prompt_tokens", None) or getattr(usage, "promptTokens", None),
+                "output_tokens": getattr(usage, "completion_tokens", None) or getattr(usage, "completionTokens", None),
+                "total_tokens": getattr(usage, "total_tokens", None) or getattr(usage, "totalTokens", None),
+            }
+        lf_client.update_current_generation(
+            output=getattr(message, "content", None),
+            usage_details=usage_details,
+            metadata={"has_tool_calls": bool(message.tool_calls)}
+        )
+
+    return response
+
+
+@observe(as_type="generation", name="finalize-writer-llm")
+def _finalize_writer_llm(
+    system_prompt: str,
+    writer_prompt: str,
+    model: str,
+    call_kwargs: Dict[str, Any],
+) -> str:
+    """Generate final report after ReAct analysis and optional tool use.
+
+    This is the second LLM call in the ReAct pattern. It's only called if the
+    analysis LLM decided to use tools. It writes the final report with the
+    enhanced evidence.
+
+    Args:
+        system_prompt: System message for the LLM
+        writer_prompt: User prompt with enhanced evidence and section requirements
+        model: OpenAI model to use
+        call_kwargs: Additional kwargs for the completion call
+
+    Returns:
+        Generated report content as string
+    """
+    from openai import OpenAI
+
+    client = OpenAI()
+    lf_client = get_langfuse_client()
+
+    # Track input
+    if lf_client:
+        lf_client.update_current_generation(
+            model=model,
+            input={"writer_prompt": writer_prompt},
+            metadata={"component": "finalize_react_writer"}
+        )
+
+    # Make LLM call
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": writer_prompt},
+        ],
+        **call_kwargs,
+    )
+
+    report_content = response.choices[0].message.content
+
+    # Track output + tokens
+    if lf_client:
+        usage = getattr(response, "usage", None)
+        usage_details = None
+        if usage:
+            usage_details = {
+                "input_tokens": getattr(usage, "prompt_tokens", None) or getattr(usage, "promptTokens", None),
+                "output_tokens": getattr(usage, "completion_tokens", None) or getattr(usage, "completionTokens", None),
+                "total_tokens": getattr(usage, "total_tokens", None) or getattr(usage, "totalTokens", None),
+            }
+        lf_client.update_current_generation(
+            output=report_content,
+            usage_details=usage_details,
+        )
+
+    return report_content
+
+
 def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, Any]) -> State:
     """ReAct implementation of finalize - can call tools then write report."""
     register_default_adapters(silent=True)
@@ -1287,46 +1473,18 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
     ]
 
     try:
-        from openai import OpenAI
-        client = OpenAI()
-        lf_client = get_langfuse_client()
-
-        if lf_client:
-            lf_client.update_current_generation(
-                model=model,
-                input={
-                    "analysis_prompt": analysis_prompt,
-                    "instructions": instructions,
-                    "topic": topic_guess,
-                },
-                metadata={"component": "finalize_react_analysis"},
-            )
-
-        response = client.chat.completions.create(
+        # Call the analysis LLM (decorated with @observe)
+        response = _finalize_analysis_llm(
+            system_prompt=system_prompt,
+            analysis_prompt=analysis_prompt,
+            tools_payload=tools_payload,
             model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": analysis_prompt},
-            ],
-            tools=tools_payload,
-            tool_choice="auto",
-            **call_kwargs,
+            call_kwargs=call_kwargs,
+            topic=topic_guess,
+            instructions=instructions,
         )
 
         message = response.choices[0].message
-        if lf_client:
-            usage = getattr(response, "usage", None)
-            usage_details = None
-            if usage:
-                usage_details = {
-                    "input_tokens": getattr(usage, "prompt_tokens", None) or getattr(usage, "promptTokens", None),
-                    "output_tokens": getattr(usage, "completion_tokens", None) or getattr(usage, "completionTokens", None),
-                    "total_tokens": getattr(usage, "total_tokens", None) or getattr(usage, "totalTokens", None),
-                }
-            lf_client.update_current_generation(
-                output=getattr(message, "content", None),
-                usage_details=usage_details,
-            )
 
         # Handle tool calls if any (enforce at most one tool call)
         if message.tool_calls:
@@ -1394,41 +1552,17 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                 sections_prompt=sections_prompt,
             )
 
-            if lf_client:
-                lf_client.update_current_generation(
-                    model=model,
-                    input={"writer_prompt": writer_prompt},
-                    metadata={"component": "finalize_react_writer"},
-                )
-
-            final_response = client.chat.completions.create(
+            # Call the writer LLM (decorated with @observe)
+            report_content = _finalize_writer_llm(
+                system_prompt=system_prompt,
+                writer_prompt=writer_prompt,
                 model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": writer_prompt},
-                ],
-                **call_kwargs,
+                call_kwargs=call_kwargs,
             )
-
-            report_content = final_response.choices[0].message.content
 
             # DEBUG: Log report before parsing
             logger.info(f"📄 FINALIZE: Generated report ({len(report_content)} chars)")
             logger.info(f"Preview: {report_content[:500]}...")
-
-            if lf_client:
-                usage = getattr(final_response, "usage", None)
-                usage_details = None
-                if usage:
-                    usage_details = {
-                        "input_tokens": getattr(usage, "prompt_tokens", None) or getattr(usage, "promptTokens", None),
-                        "output_tokens": getattr(usage, "completion_tokens", None) or getattr(usage, "completionTokens", None),
-                        "total_tokens": getattr(usage, "total_tokens", None) or getattr(usage, "totalTokens", None),
-                    }
-                lf_client.update_current_generation(
-                    output=report_content,
-                    usage_details=usage_details,
-                )
         else:
             # No tools needed, extract report from initial message
             report_content = message.content
