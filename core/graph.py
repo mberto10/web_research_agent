@@ -571,11 +571,59 @@ def research(state: State) -> State:
         for idx, step in enumerate(research_steps):
             step_label = step.get("use") or step.get("name") or f"step-{idx}"
 
+            # Start step-level tracing span (auto-nests under research-phase)
+            step_lf_client = get_langfuse_client()
+
+            if step_lf_client:
+                step_span = step_lf_client.start_as_current_span(
+                    name=f"research-step-{idx+1}:{step_label}"
+                ).__enter__()
+                try:
+                    step_span.update(
+                        input={
+                            "step_index": idx + 1,
+                            "step_name": step_label,
+                            "tool": step.get("use") or step.get("name"),
+                            "inputs_keys": list((step.get("inputs") or {}).keys()),
+                            "params_keys": list((step.get("params") or {}).keys()),
+                            "has_when_condition": bool(step.get("when")),
+                            "has_foreach": bool(step.get("foreach")),
+                            "description": step.get("description"),
+                        },
+                        metadata={
+                            "strategy": state.strategy_slug,
+                            "step_index": idx + 1,
+                        }
+                    )
+                except Exception:
+                    pass
+            else:
+                step_span = None
+
+            # Check when condition
             if step.get("when") and not _eval_when(step["when"], state):
+                if step_span:
+                    try:
+                        step_span.update(
+                            output={"skipped": True, "reason": "when_condition_false"},
+                            metadata={"skipped": True}
+                        )
+                        step_span.__exit__(None, None, None)
+                    except Exception:
+                        pass
                 continue
 
             use = step.get("use")
             if not use and not step.get("name"):
+                if step_span:
+                    try:
+                        step_span.update(
+                            output={"skipped": True, "reason": "no_use_or_name"},
+                            metadata={"skipped": True}
+                        )
+                        step_span.__exit__(None, None, None)
+                    except Exception:
+                        pass
                 continue
 
             # Legacy tool-chain support -------------------------------------------------
@@ -643,6 +691,15 @@ def research(state: State) -> State:
                     else:
                         results = []
                 except Exception as exc:  # pragma: no cover - network errors mocked in tests
+                    if step_span:
+                        try:
+                            step_span.update(
+                                output={"error": str(exc)[:200]},
+                                level="ERROR",
+                                metadata={"execution_success": False, "execution_path": "legacy"}
+                            )
+                        except Exception:
+                            pass
                     _log_step_error(step_label, exc)
                     results = []
 
@@ -668,6 +725,20 @@ def research(state: State) -> State:
                     if suggestions:
                         task_queries.update(suggestions)
                         base_queries.update(suggestions)
+
+                # Capture output for legacy path
+                if step_span:
+                    try:
+                        step_span.update(
+                            output={
+                                "skipped": False,
+                                "results_count": len(results) if isinstance(results, list) else 1,
+                            },
+                            metadata={"execution_success": True, "execution_path": "legacy"}
+                        )
+                        step_span.__exit__(None, None, None)
+                    except Exception:
+                        pass
                 continue
 
             # Extended provider.method routing ---------------------------------------
@@ -707,6 +778,22 @@ def research(state: State) -> State:
                         state.vars[step["save_as"]] = step_outputs
                     if collected:
                         last_results = collected
+
+                    # Capture output for foreach path
+                    if step_span:
+                        try:
+                            step_span.update(
+                                output={
+                                    "skipped": False,
+                                    "foreach_iterations": len(items),
+                                    "results_count": len(collected),
+                                    "saved_to_var": step.get("save_as"),
+                                },
+                                metadata={"execution_success": True, "execution_path": "modern_foreach"}
+                            )
+                            step_span.__exit__(None, None, None)
+                        except Exception:
+                            pass
                     continue
 
                 render_context = {**variables, **state.vars, "last_results": last_results}
@@ -722,6 +809,15 @@ def research(state: State) -> State:
                     provider, method = use, "call"
                 results = _execute_use(use, inputs)
             except Exception as exc:  # pragma: no cover - defensive
+                if step_span:
+                    try:
+                        step_span.update(
+                            output={"error": str(exc)[:200]},
+                            level="ERROR",
+                            metadata={"execution_success": False, "execution_path": "modern"}
+                        )
+                    except Exception:
+                        pass
                 _log_step_error(step_label, exc)
                 results = []
 
@@ -731,6 +827,21 @@ def research(state: State) -> State:
             new_results = _as_evidence_list(results)
             if new_results:
                 last_results = new_results
+
+            # Capture output for normal modern path
+            if step_span:
+                try:
+                    step_span.update(
+                        output={
+                            "skipped": False,
+                            "results_count": len(results) if isinstance(results, list) else 1,
+                            "saved_to_var": step.get("save_as"),
+                        },
+                        metadata={"execution_success": True, "execution_path": "modern"}
+                    )
+                    step_span.__exit__(None, None, None)
+                except Exception:
+                    pass
 
         # End for over research steps
 
