@@ -26,13 +26,18 @@ This skill wraps the MCP Linear tools and provides helper utilities that add:
 - Batch operations
 - Natural language → Linear API translation
 
+**⚡ OPTIMIZED: All helper scripts have been upgraded for reliability and clarity!**
+See `helpers/README.md` for detailed documentation and examples.
+
 **Helper Scripts:**
-- `linear_client.py`: Unified API client with retry logic
+- `linear_client.py`: Unified API client with retry logic ✅ **Fixed auth header**
+- `query_issues.py`: Advanced querying and filtering ✅ **Simplified & reliable**
+- `get_issue.py`: Retrieve specific issue by identifier ✅ **NEW**
+- `update_issue.py`: Issue updates with validation ✅ **State lookup + comments**
 - `create_issue.py`: Template-based issue creation
-- `update_issue.py`: Issue updates with validation
-- `query_issues.py`: Advanced querying and filtering
 - `bulk_operations.py`: Batch create/update operations
 - `reporting.py`: Team and sprint reports
+- `test_api.py`: API connectivity testing ✅ **NEW**
 
 **Templates:**
 - `bug_report.yaml`: Bug issue template

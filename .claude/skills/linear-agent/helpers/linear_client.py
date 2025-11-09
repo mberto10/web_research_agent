@@ -49,7 +49,7 @@ class LinearClient:
 
         self.headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": self.api_key
         }
         self.request_count = 0
         self.request_window_start = time.time()
@@ -390,6 +390,68 @@ class LinearClient:
         """
         result = self._execute_query(query)
         return result.get("projects", {}).get("nodes", [])
+
+    def list_workflow_states(self, team_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        List workflow states, optionally filtered by team.
+
+        Args:
+            team_id: Optional team ID to filter states
+
+        Returns:
+            List of workflow state dictionaries
+        """
+        if team_id:
+            query = """
+            query TeamStates($teamId: String!) {
+                team(id: $teamId) {
+                    states {
+                        nodes {
+                            id
+                            name
+                            type
+                            color
+                            description
+                        }
+                    }
+                }
+            }
+            """
+            result = self._execute_query(query, {"teamId": team_id})
+            return result.get("team", {}).get("states", {}).get("nodes", [])
+        else:
+            query = """
+            query WorkflowStates {
+                workflowStates {
+                    nodes {
+                        id
+                        name
+                        type
+                        color
+                        description
+                    }
+                }
+            }
+            """
+            result = self._execute_query(query)
+            return result.get("workflowStates", {}).get("nodes", [])
+
+    def get_state_by_name(self, state_name: str, team_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get workflow state by name (case-insensitive).
+
+        Args:
+            state_name: State name to search for
+            team_id: Optional team ID to scope search
+
+        Returns:
+            State dictionary if found, None otherwise
+        """
+        states = self.list_workflow_states(team_id)
+        for state in states:
+            if state["name"].lower() == state_name.lower():
+                return state
+        return None
 
     def create_comment(
         self,
