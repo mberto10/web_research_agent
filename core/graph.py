@@ -327,8 +327,26 @@ def _refine_queries_with_llm(
     return refined
 
 
+@observe(as_type="span", capture_input=False, capture_output=False, name="scope-phase")
 async def scope(state: State) -> State:
     """Scope phase categorizes the request and selects a strategy."""
+    lf_client = get_langfuse_client()
+
+    # Capture input
+    if lf_client:
+        try:
+            lf_client.update_current_span(
+                input={
+                    "user_request": state.user_request[:200],
+                    "pre_existing_strategy": state.strategy_slug,
+                },
+                metadata={
+                    "phase": "scope",
+                }
+            )
+        except Exception:
+            pass
+
     logger.info(f"🔍 SCOPE: Starting scope analysis for: {state.user_request[:100]}...")
 
     # Create database session for caching
@@ -394,9 +412,29 @@ async def scope(state: State) -> State:
     logger.info(f"  Tasks: {state.tasks}")
     logger.info(f"  Variables: {state.vars}")
 
+    # Capture output
+    if lf_client:
+        try:
+            lf_client.update_current_span(
+                output={
+                    "category": state.category,
+                    "time_window": state.time_window,
+                    "depth": state.depth,
+                    "strategy_slug": state.strategy_slug,
+                    "tasks_count": len(state.tasks),
+                    "vars_keys": list(state.vars.keys()),
+                },
+                metadata={
+                    "strategy_source": "llm" if scope_result.get("strategy_slug") else "fallback",
+                }
+            )
+        except Exception:
+            pass
+
     return state
 
 
+@observe(as_type="span", capture_input=False, capture_output=False, name="research-phase")
 def research(state: State) -> State:
     """Execute the research phase based on the selected strategy using a single pass.
 
@@ -404,9 +442,41 @@ def research(state: State) -> State:
     strategy's steps. We no longer fan-out across multiple tasks; instead we derive
     a canonical topic and run the chain once.
     """
+    lf_client = get_langfuse_client()
+
+    # Capture input
+    if lf_client:
+        try:
+            lf_client.update_current_span(
+                input={
+                    "strategy_slug": state.strategy_slug,
+                    "tasks_count": len(state.tasks),
+                },
+                metadata={
+                    "phase": "research",
+                }
+            )
+        except Exception:
+            pass
+
     logger.info(f"🔬 RESEARCH: Starting research phase")
     if not state.strategy_slug:
         logger.warning(f"⚠️ RESEARCH: No strategy selected, skipping")
+        # Capture output before early return
+        if lf_client:
+            try:
+                lf_client.update_current_span(
+                    output={
+                        "skipped": True,
+                        "reason": "no_strategy",
+                        "evidence_collected": 0,
+                    },
+                    metadata={
+                        "skipped": True,
+                    }
+                )
+            except Exception:
+                pass
         return state
 
     register_default_adapters(silent=True)
@@ -419,6 +489,21 @@ def research(state: State) -> State:
     normalized_steps = [_normalize_step(step) for step in source_steps]
     research_steps = [s for s in normalized_steps if (s.get("phase") or "research") == "research"]
     if not research_steps:
+        # Capture output before early return
+        if lf_client:
+            try:
+                lf_client.update_current_span(
+                    output={
+                        "skipped": True,
+                        "reason": "no_research_steps",
+                        "evidence_collected": 0,
+                    },
+                    metadata={
+                        "skipped": True,
+                    }
+                )
+            except Exception:
+                pass
         return state
 
     base_queries = dict(strategy.queries or {})
@@ -656,24 +741,95 @@ def research(state: State) -> State:
     state.evidence.extend(aggregated_evidence)
     state.evidence = _dedupe_and_score(state.evidence, max_results)
     logger.info(f"✅ RESEARCH: Complete - Collected {len(state.evidence)} unique evidence items")
+
+    # Capture output
+    if lf_client:
+        try:
+            lf_client.update_current_span(
+                output={
+                    "evidence_collected": len(state.evidence),
+                    "sample_urls": [ev.url for ev in state.evidence[:3]],
+                    "evidence_tools": list(set(ev.tool for ev in state.evidence if ev.tool)),
+                    "unique_publishers": len(set(ev.publisher for ev in state.evidence if ev.publisher)),
+                },
+                metadata={
+                    "strategy": state.strategy_slug,
+                    "fan_out_mode": fan_out_policy,
+                }
+            )
+        except Exception:
+            pass
+
     return state
 
 
+@observe(as_type="span", capture_input=False, capture_output=False, name="fill-phase")
 def fill(state: State) -> State:
     """Fill phase: ask an LLM to provide values for whitelisted inputs per step.
 
     Minimal implementation: creates a runtime plan and stores under state.vars["runtime_plan"].
     Skips if no llm_fill present or no API key; keeps architecture working even without fills.
     """
+    lf_client = get_langfuse_client()
+
+    # Capture input
+    if lf_client:
+        try:
+            lf_client.update_current_span(
+                input={
+                    "strategy_slug": state.strategy_slug,
+                    "category": state.category,
+                    "time_window": state.time_window,
+                    "tasks_count": len(state.tasks),
+                },
+                metadata={
+                    "phase": "fill",
+                }
+            )
+        except Exception:
+            pass
+
     logger.info(f"📝 FILL: Starting fill phase")
 
     if not state.strategy_slug:
         logger.warning(f"⚠️ FILL: No strategy selected, skipping")
+        # Capture output before early return
+        if lf_client:
+            try:
+                lf_client.update_current_span(
+                    output={
+                        "skipped": True,
+                        "reason": "no_strategy",
+                        "runtime_plan_steps": 0,
+                    },
+                    metadata={
+                        "skipped": True,
+                    }
+                )
+            except Exception:
+                pass
         return state
     try:
         strategy = load_strategy(state.strategy_slug)
     except Exception as e:
         logger.error(f"❌ FILL: Failed to load strategy: {e}")
+        # Capture output before early return
+        if lf_client:
+            try:
+                lf_client.update_current_span(
+                    output={
+                        "skipped": True,
+                        "reason": "strategy_load_failed",
+                        "error": str(e),
+                        "runtime_plan_steps": 0,
+                    },
+                    metadata={
+                        "skipped": True,
+                        "error": True,
+                    }
+                )
+            except Exception:
+                pass
         return state
 
     # Calculate dates based on time window to make them available to the LLM
@@ -775,25 +931,125 @@ def fill(state: State) -> State:
 
     state.vars["runtime_plan"] = runtime_plan
     logger.info(f"✅ FILL: Created runtime plan with {len(runtime_plan)} steps")
+
+    # Capture output
+    if lf_client:
+        try:
+            lf_client.update_current_span(
+                output={
+                    "runtime_plan_steps": len(runtime_plan),
+                    "date_variables": {
+                        "current_date": state.vars.get("current_date"),
+                        "start_date": state.vars.get("start_date"),
+                        "end_date": state.vars.get("end_date"),
+                    },
+                    "total_vars_count": len(state.vars),
+                    "vars_keys": list(state.vars.keys()),
+                },
+                metadata={
+                    "strategy": state.strategy_slug,
+                    "has_llm_fill": bool(fill_requests),
+                }
+            )
+        except Exception:
+            pass
+
     return state
 
 
+@observe(as_type="span", capture_input=False, capture_output=False, name="finalize-phase")
 def finalize(state: State) -> State:
     """ReAct-style finalize node that can call tools then write report sections."""
+    lf_client = get_langfuse_client()
+
+    # Capture input
+    if lf_client:
+        try:
+            lf_client.update_current_span(
+                input={
+                    "strategy_slug": state.strategy_slug,
+                    "evidence_available": len(state.evidence),
+                },
+                metadata={
+                    "phase": "finalize",
+                }
+            )
+        except Exception:
+            pass
+
     # Check if we should use ReAct mode based on strategy
     if not state.strategy_slug:
+        # Capture output before early return
+        if lf_client:
+            try:
+                lf_client.update_current_span(
+                    output={
+                        "skipped": True,
+                        "reason": "no_strategy",
+                        "sections_generated": 0,
+                    },
+                    metadata={
+                        "skipped": True,
+                    }
+                )
+            except Exception:
+                pass
         return state
-    
+
     strategy = load_strategy(state.strategy_slug)
     finalize_config = getattr(strategy, 'finalize', None) or {}
-    
+
     # If reactive mode is enabled, use ReAct approach
     if finalize_config.get("reactive"):
-        return _finalize_reactive(state, strategy, finalize_config)
-    
+        # Capture output before delegating
+        if lf_client:
+            try:
+                lf_client.update_current_span(
+                    metadata={
+                        "mode": "reactive",
+                        "delegated": True,
+                    }
+                )
+            except Exception:
+                pass
+        result = _finalize_reactive(state, strategy, finalize_config)
+        # Capture output after delegation
+        if lf_client:
+            try:
+                lf_client.update_current_span(
+                    output={
+                        "sections_generated": len(result.sections),
+                        "citations_count": len(result.citations),
+                        "total_report_length": sum(len(s) for s in result.sections),
+                        "report_preview": result.sections[0][:200] if result.sections else None,
+                    },
+                    metadata={
+                        "strategy": state.strategy_slug,
+                        "mode": "reactive",
+                    }
+                )
+            except Exception:
+                pass
+        return result
+
     # Otherwise, fall back to original behavior
     runtime_plan: List[Dict[str, Any]] = state.vars.get("runtime_plan", [])  # type: ignore
     if not runtime_plan:
+        # Capture output before early return
+        if lf_client:
+            try:
+                lf_client.update_current_span(
+                    output={
+                        "skipped": True,
+                        "reason": "no_runtime_plan",
+                        "sections_generated": 0,
+                    },
+                    metadata={
+                        "skipped": True,
+                    }
+                )
+            except Exception:
+                pass
         return state
 
     register_default_adapters(silent=True)
@@ -804,6 +1060,21 @@ def finalize(state: State) -> State:
 
     steps = [s for s in runtime_plan if (s.get("phase") or "research") == "finalize"]
     if not steps:
+        # Capture output before early return
+        if lf_client:
+            try:
+                lf_client.update_current_span(
+                    output={
+                        "skipped": True,
+                        "reason": "no_finalize_steps",
+                        "sections_generated": 0,
+                    },
+                    metadata={
+                        "skipped": True,
+                    }
+                )
+            except Exception:
+                pass
         return state
 
     # Format evidence as text for LLM consumption
@@ -879,6 +1150,25 @@ def finalize(state: State) -> State:
 
     # Merge evidence
     state.evidence.extend(_dedupe_and_score(task_evidence, None))
+
+    # Capture output
+    if lf_client:
+        try:
+            lf_client.update_current_span(
+                output={
+                    "sections_generated": len(state.sections),
+                    "citations_count": len(state.citations),
+                    "total_report_length": sum(len(s) for s in state.sections),
+                    "report_preview": state.sections[0][:200] if state.sections else None,
+                },
+                metadata={
+                    "strategy": state.strategy_slug,
+                    "mode": "standard",
+                }
+            )
+        except Exception:
+            pass
+
     return state
 
 
