@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 # Add langfuse helpers to path
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 LANGFUSE_HELPERS = PROJECT_ROOT / ".claude/skills/langfuse-optimization/helpers"
 sys.path.insert(0, str(LANGFUSE_HELPERS))
 
