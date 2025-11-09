@@ -60,12 +60,12 @@ def find_trace(
     print(f"  Email: {email}")
     print(f"  Time range: {start_time} to {end_time}")
 
-    # Build metadata filter
-    metadata_filter = {
-        "user_email": email
+    # Build input filter (email and research_topic are stored in trace input, not metadata)
+    input_filter = {
+        "email": email
     }
     if topic:
-        metadata_filter["research_topic"] = topic
+        input_filter["research_topic"] = topic
 
     # Search traces
     try:
@@ -84,14 +84,19 @@ def find_trace(
             if not hasattr(traces_response, 'data') or not traces_response.data:
                 break
 
-            # Filter by metadata
+            # Filter by input data (email and research_topic are in input, not metadata)
             for trace in traces_response.data:
                 trace_dict = trace.dict() if hasattr(trace, 'dict') else trace
-                meta = trace_dict.get('metadata', {})
+                input_data = trace_dict.get('input', {})
 
-                # Check if metadata matches
-                if meta.get('user_email') == email:
-                    all_traces.append(trace_dict)
+                # Check if input email matches
+                if input_data.get('email') == email:
+                    # If topic filter is provided, also check research_topic
+                    if topic:
+                        if input_data.get('research_topic') == topic:
+                            all_traces.append(trace_dict)
+                    else:
+                        all_traces.append(trace_dict)
 
             if len(traces_response.data) < 10:
                 break
@@ -104,7 +109,7 @@ def find_trace(
             print(f"\n⚠️  No traces found. Possible reasons:")
             print(f"  1. Execution not complete yet (wait 30-60s)")
             print(f"  2. Time range too narrow (try --time-range last_1_day)")
-            print(f"  3. Metadata doesn't match (check email)")
+            print(f"  3. Email doesn't match (check email in trace input)")
             print(f"  4. Langfuse not enabled in API")
 
             return {
@@ -112,7 +117,7 @@ def find_trace(
                 "trace_count": 0,
                 "traces": [],
                 "query": {
-                    "metadata_filter": metadata_filter,
+                    "input_filter": input_filter,
                     "time_range": time_range,
                     "start_time": start_time.isoformat(),
                     "end_time": end_time.isoformat()
@@ -136,7 +141,7 @@ def find_trace(
             "latest_trace_timestamp": latest_trace.get('timestamp'),
             "langfuse_url": dashboard_url,
             "query": {
-                "metadata_filter": metadata_filter,
+                "input_filter": input_filter,
                 "time_range": time_range,
                 "start_time": start_time.isoformat(),
                 "end_time": end_time.isoformat()
