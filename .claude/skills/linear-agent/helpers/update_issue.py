@@ -138,32 +138,47 @@ def update_issue_interactive(
 
     # Handle state changes
     if state:
-        # Need to look up state ID by name
-        # For now, we'll require state_id parameter instead
-        print("⚠ Warning: State name lookup not yet implemented")
-        print("  Please provide state ID instead")
+        team_id = current_issue.get("team", {}).get("id")
+        state_obj = client.get_state_by_name(state, team_id)
+        if state_obj:
+            updates["stateId"] = state_obj["id"]
+            old_state = current_issue.get("state", {}).get("name", "Unknown")
+            changes_summary.append(f"State: {old_state} → {state}")
+            if verbose:
+                print(f"✓ Found state: {state} (ID: {state_obj['id']})")
+        else:
+            print(f"⚠ Warning: State not found: '{state}'")
+            if verbose:
+                # Show available states
+                states = client.list_workflow_states(team_id)
+                state_names = [s["name"] for s in states]
+                print(f"  Available states: {', '.join(state_names)}")
 
-    if not updates:
-        print("⚠ No changes specified")
-        return current_issue
+    # Apply updates only if there are changes
+    if updates:
+        # Show changes before applying
+        if verbose:
+            print("\n📝 Proposed changes:")
+            for change in changes_summary:
+                print(f"  • {change}")
 
-    # Show changes before applying
-    if verbose:
-        print("\n📝 Proposed changes:")
-        for change in changes_summary:
-            print(f"  • {change}")
+        # Apply updates
+        if verbose:
+            print("\n🔄 Applying updates...")
 
-    # Apply updates
-    if verbose:
-        print("\n🔄 Applying updates...")
+        updated_issue = client.update_issue(issue_id, **updates)
+    else:
+        if verbose and not comment:
+            print("⚠ No changes specified")
+        updated_issue = current_issue
 
-    updated_issue = client.update_issue(issue_id, **updates)
-
-    # Add comment if provided
+    # Add comment if provided (independent of other updates)
     if comment:
         if verbose:
             print(f"💬 Adding comment...")
         client.create_comment(issue_id, comment)
+        if verbose:
+            print(f"✓ Comment added successfully")
 
     if verbose:
         print("✓ Update complete!")

@@ -45,95 +45,97 @@ def query_issues(
     Returns:
         List of matching issues
     """
-    # Build GraphQL query with filters
-    filter_parts = []
-    variables = {}
+    if verbose:
+        print("🔍 Querying Linear issues...")
 
-    if team_name:
-        team = client.get_team_by_name(team_name)
-        if not team:
-            raise LinearAPIError(f"Team not found: {team_name}")
-        filter_parts.append("team: { name: { eq: $teamName } }")
-        variables["teamName"] = team_name
-        if verbose:
-            print(f"🔍 Filtering by team: {team_name}")
-
-    if state_name:
-        filter_parts.append("state: { name: { eq: $stateName } }")
-        variables["stateName"] = state_name
-        if verbose:
-            print(f"🔍 Filtering by state: {state_name}")
-
-    if priority is not None:
-        filter_parts.append("priority: { eq: $priority }")
-        variables["priority"] = priority
-        if verbose:
-            priority_names = {0: "None", 1: "Urgent", 2: "High", 3: "Normal", 4: "Low"}
-            print(f"🔍 Filtering by priority: {priority_names.get(priority, priority)}")
-
-    if assignee_id:
-        filter_parts.append("assignee: { id: { eq: $assigneeId } }")
-        variables["assigneeId"] = assignee_id
-        if verbose:
-            print(f"🔍 Filtering by assignee: {assignee_id}")
-
-    # Build filter object
-    filter_str = ""
-    if filter_parts:
-        filter_str = f"filter: {{ {', '.join(filter_parts)} }}"
-
-    # Build query
-    query = f"""
-    query Issues($first: Int{', $' + ', $'.join(f'{k}: {get_graphql_type(k)}' for k in variables.keys()) if variables else ''}) {{
-        issues(first: $first{', ' + filter_str if filter_str else ''}) {{
-            nodes {{
+    # Use a simple query and filter client-side for reliability
+    query = """
+    query Issues($first: Int!) {
+        issues(first: $first) {
+            nodes {
                 id
                 identifier
                 title
                 description
                 priority
                 estimate
-                state {{
+                state {
                     id
                     name
                     type
-                }}
-                assignee {{
+                }
+                assignee {
                     id
                     name
                     email
-                }}
-                team {{
+                }
+                team {
                     id
                     name
                     key
-                }}
-                project {{
+                }
+                project {
                     id
                     name
-                }}
-                labels {{
-                    nodes {{
+                }
+                labels {
+                    nodes {
                         id
                         name
                         color
-                    }}
-                }}
+                    }
+                }
                 createdAt
                 updatedAt
                 completedAt
                 url
-            }}
-        }}
-    }}
+            }
+        }
+    }
     """
 
-    variables["first"] = limit
+    variables = {"first": min(limit * 2, 100)}  # Fetch more to account for filtering
     result = client._execute_query(query, variables)
     issues = result.get("issues", {}).get("nodes", [])
 
-    # Apply client-side filters (for features not supported in GraphQL filter)
+    if verbose:
+        print(f"✓ Retrieved {len(issues)} total issues")
+
+    # Apply client-side filters
     filtered_issues = issues
+
+    if team_name:
+        filtered_issues = [
+            issue for issue in filtered_issues
+            if issue.get("team", {}).get("name", "").lower() == team_name.lower()
+        ]
+        if verbose:
+            print(f"🔍 Filtered by team '{team_name}': {len(filtered_issues)} issues")
+
+    if state_name:
+        filtered_issues = [
+            issue for issue in filtered_issues
+            if issue.get("state", {}).get("name", "").lower() == state_name.lower()
+        ]
+        if verbose:
+            print(f"🔍 Filtered by state '{state_name}': {len(filtered_issues)} issues")
+
+    if priority is not None:
+        filtered_issues = [
+            issue for issue in filtered_issues
+            if issue.get("priority") == priority
+        ]
+        priority_names = {0: "None", 1: "Urgent", 2: "High", 3: "Normal", 4: "Low"}
+        if verbose:
+            print(f"🔍 Filtered by priority '{priority_names.get(priority, priority)}': {len(filtered_issues)} issues")
+
+    if assignee_id:
+        filtered_issues = [
+            issue for issue in filtered_issues
+            if issue.get("assignee", {}).get("id") == assignee_id
+        ]
+        if verbose:
+            print(f"🔍 Filtered by assignee '{assignee_id}': {len(filtered_issues)} issues")
 
     if search:
         search_lower = search.lower()
@@ -143,7 +145,7 @@ def query_issues(
                 search_lower in (issue.get("description") or "").lower())
         ]
         if verbose:
-            print(f"🔍 Searching for: '{search}'")
+            print(f"🔍 Filtered by search '{search}': {len(filtered_issues)} issues")
 
     if labels:
         filtered_issues = [
@@ -154,10 +156,13 @@ def query_issues(
             )
         ]
         if verbose:
-            print(f"🔍 Filtering by labels: {', '.join(labels)}")
+            print(f"🔍 Filtered by labels {labels}: {len(filtered_issues)} issues")
+
+    # Limit results
+    filtered_issues = filtered_issues[:limit]
 
     if verbose:
-        print(f"✓ Found {len(filtered_issues)} matching issues")
+        print(f"✓ Returning {len(filtered_issues)} matching issues")
 
     return filtered_issues
 
