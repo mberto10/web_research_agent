@@ -560,7 +560,7 @@ async def execute_manual_research(
 # --- HTML Email Generation Utilities ---
 
 def markdown_to_html(markdown: str) -> str:
-    """Convert markdown to HTML with basic styling.
+    """Convert markdown to HTML with inline styling.
 
     Args:
         markdown: Markdown text to convert
@@ -571,77 +571,194 @@ def markdown_to_html(markdown: str) -> str:
     if not markdown:
         return ''
 
+    import markdown2
     import re
 
-    html = markdown
+    # Convert markdown to HTML using markdown2
+    html = markdown2.markdown(markdown, extras=['fenced-code-blocks', 'tables'])
 
-    # Headers (order matters: h3 before h2 before h1)
-    html = re.sub(r'^### (.+)$', r'<h3 style="color: #4a5568; font-size: 18px; font-weight: 600; margin: 20px 0 10px 0;">\1</h3>', html, flags=re.MULTILINE)
-    html = re.sub(r'^## (.+)$', r'<h2 style="color: #2d3748; font-size: 22px; font-weight: 600; margin: 28px 0 14px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">\1</h2>', html, flags=re.MULTILINE)
-    html = re.sub(r'^# (.+)$', r'<h1 style="color: #1a202c; font-size: 28px; font-weight: 700; margin: 32px 0 16px 0; padding-bottom: 12px; border-bottom: 3px solid #667eea;">\1</h1>', html, flags=re.MULTILINE)
+    # Apply inline styles to HTML elements
+    # Headers
+    html = re.sub(r'<h1>', r'<h1 style="color: #1a202c; font-size: 28px; font-weight: 700; margin: 32px 0 16px 0; padding-bottom: 12px; border-bottom: 3px solid #667eea;">', html)
+    html = re.sub(r'<h2>', r'<h2 style="color: #2d3748; font-size: 22px; font-weight: 600; margin: 28px 0 14px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">', html)
+    html = re.sub(r'<h3>', r'<h3 style="color: #4a5568; font-size: 18px; font-weight: 600; margin: 20px 0 10px 0;">', html)
+    html = re.sub(r'<h4>', r'<h4 style="color: #4a5568; font-size: 16px; font-weight: 600; margin: 18px 0 8px 0;">', html)
 
-    # Bold and italic
-    html = re.sub(r'\*\*(.+?)\*\*', r'<strong style="color: #2d3748; font-weight: 600;">\1</strong>', html)
-    html = re.sub(r'\*(.+?)\*', r'<em>\1</em>', html)
+    # Paragraphs
+    html = re.sub(r'<p>', r'<p style="color: #4a5568; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;">', html)
+
+    # Lists
+    html = re.sub(r'<ul>', r'<ul style="margin: 0 0 20px 0; padding-left: 24px;">', html)
+    html = re.sub(r'<ol>', r'<ol style="margin: 0 0 20px 0; padding-left: 24px;">', html)
+    html = re.sub(r'<li>', r'<li style="color: #4a5568; font-size: 15px; line-height: 1.7; margin-bottom: 10px;">', html)
 
     # Links
-    html = re.sub(r'\[(.+?)\]\((.+?)\)', r'<a href="\2" style="color: #667eea; text-decoration: none; font-weight: 500;">\1</a>', html)
+    html = re.sub(r'<a href="', r'<a style="color: #667eea; text-decoration: none; font-weight: 500;" href="', html)
 
-    # List items
-    html = re.sub(r'^[•\-\*]\s+(.+)$', r'<li style="color: #4a5568; font-size: 15px; line-height: 1.7; margin-bottom: 10px;">\1</li>', html, flags=re.MULTILINE)
-    html = re.sub(r'^\d+\.\s+(.+)$', r'<li style="color: #4a5568; font-size: 15px; line-height: 1.7; margin-bottom: 10px;">\1</li>', html, flags=re.MULTILINE)
+    # Strong/Bold
+    html = re.sub(r'<strong>', r'<strong style="color: #2d3748; font-weight: 600;">', html)
 
-    # Wrap consecutive list items in ul tags
-    html = re.sub(r'(<li.*?</li>\n?)+', lambda m: f'<ul style="margin: 0 0 20px 0; padding-left: 24px;">{m.group(0)}</ul>', html, flags=re.DOTALL)
+    # Tables (if present)
+    html = re.sub(r'<table>', r'<table style="border-collapse: collapse; width: 100%; margin: 20px 0;">', html)
+    html = re.sub(r'<th>', r'<th style="border: 1px solid #e2e8f0; padding: 12px; background: #f7fafc; text-align: left; font-weight: 600;">', html)
+    html = re.sub(r'<td>', r'<td style="border: 1px solid #e2e8f0; padding: 12px;">', html)
 
-    # Paragraphs (double newlines)
-    html = re.sub(r'\n\n', '</p><p style="color: #4a5568; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;">', html)
+    # Code blocks
+    html = re.sub(r'<code>', r'<code style="background: #f7fafc; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 14px;">', html)
+    html = re.sub(r'<pre>', r'<pre style="background: #f7fafc; padding: 16px; border-radius: 6px; overflow-x: auto; margin: 16px 0;">', html)
 
-    # Single newlines to br
-    html = re.sub(r'\n', '<br>', html)
-
-    # Wrap in paragraph if doesn't start with a block element
-    if not html.startswith('<h') and not html.startswith('<ul') and not html.startswith('<p'):
-        html = f'<p style="color: #4a5568; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;">{html}</p>'
+    # Superscripts (for citation numbers)
+    html = re.sub(r'<sup>', r'<sup style="color: #667eea; font-weight: 600; font-size: 11px;">', html)
 
     return html
 
 
-def render_citations_html(citations: list) -> str:
-    """Render citations as styled HTML cards.
+def render_citations_html(citations_registry: list) -> str:
+    """Render citations from registry as styled HTML cards.
 
     Args:
-        citations: List of citation dicts with title, url, snippet
+        citations_registry: List of citation dicts with {number, url, text, snippet}
 
     Returns:
         HTML string with citation section
     """
-    if not citations or len(citations) == 0:
+    if not citations_registry or len(citations_registry) == 0:
         return ''
 
     citation_items = []
-    for idx, citation in enumerate(citations, 1):
-        title = citation.get('title', 'Untitled Source')
-        url = citation.get('url', '#')
+    MAX_SNIPPET_LENGTH = 200  # Standardize snippet length
+
+    for citation in citations_registry:
+        number = citation['number']
+        url = citation['url']
         snippet = citation.get('snippet', '')
 
-        citation_html = f'''
+        # Truncate snippet to consistent length if present
+        if snippet:
+            if len(snippet) > MAX_SNIPPET_LENGTH:
+                snippet = snippet[:MAX_SNIPPET_LENGTH].rsplit(' ', 1)[0] + '...'
+
+            # Render with snippet
+            citation_html = f'''
             <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 12px;">
-                <div style="font-size: 16px; font-weight: 600; color: #2d3748; margin: 0 0 8px 0;">[{idx}] {title}</div>
-                <a href="{url}" style="font-size: 14px; color: #667eea; text-decoration: none; word-break: break-all; display: block; margin-bottom: 8px;">{url}</a>
-                {f'<p style="font-size: 14px; color: #718096; line-height: 1.5; margin: 0;">{snippet}</p>' if snippet else ''}
+                <a href="{url}" style="font-size: 14px; color: #667eea; text-decoration: none; word-break: break-all; display: block; margin-bottom: 8px; font-weight: 500;">[{number}] {url}</a>
+                <p style="font-size: 14px; color: #718096; line-height: 1.5; margin: 0;">{snippet}</p>
             </div>
         '''
+        else:
+            # Render without snippet (cleaner for inline-only citations)
+            citation_html = f'''
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 12px;">
+                <a href="{url}" style="font-size: 14px; color: #667eea; text-decoration: none; word-break: break-all; display: block; font-weight: 500;">[{number}] {url}</a>
+            </div>
+        '''
+
         citation_items.append(citation_html)
 
     citations_html = ''.join(citation_items)
 
     return f'''
         <div style="background: #f7fafc; border-left: 4px solid #667eea; padding: 24px; margin: 32px 0; border-radius: 4px;">
-            <h2 style="margin-top: 0; color: #2d3748; font-size: 20px; border-bottom: none;">📚 Sources & Citations</h2>
+            <h2 style="margin-top: 0; color: #2d3748; font-size: 20px; border-bottom: none;">📚 Quellen & Zitate</h2>
             {citations_html}
         </div>
     '''
+
+
+def extract_and_number_citations(sections: list, evidence: list) -> tuple:
+    """Extract citations from markdown, merge with evidence, assign numbers.
+
+    This function:
+    1. Finds all markdown links [text](url) in order of appearance
+    2. Merges with evidence citations (deduplicating by URL)
+    3. Assigns citation numbers in order of first appearance
+    4. Replaces markdown links with text<sup>[N]</sup>
+
+    Args:
+        sections: List of markdown section strings
+        evidence: List of evidence citation dicts/objects
+
+    Returns:
+        tuple: (modified_sections, citations_registry)
+        - modified_sections: Sections with links replaced by superscripts
+        - citations_registry: List of dicts with {number, url, text, snippet}
+    """
+    import re
+
+    # Step 1: Find all markdown links in order of appearance
+    citations_registry = []
+    url_to_number = {}  # For deduplication: url -> citation_number
+
+    for section in sections:
+        if not section:
+            continue
+
+        # Find all [text](url) patterns
+        for match in re.finditer(r'\[([^\]]+)\]\(([^\)]+)\)', section):
+            link_text = match.group(1)
+            url = match.group(2).strip()
+
+            if url not in url_to_number:
+                number = len(citations_registry) + 1
+                url_to_number[url] = number
+                citations_registry.append({
+                    "number": number,
+                    "url": url,
+                    "text": link_text,
+                    "snippet": None
+                })
+
+    # Step 2: Merge evidence citations
+    for ev in evidence:
+        # Handle both dict and object formats
+        if isinstance(ev, dict):
+            url = ev.get('url', '').strip()
+            title = ev.get('title', '')
+            snippet = ev.get('snippet', '')
+        else:
+            url = getattr(ev, 'url', '').strip()
+            title = getattr(ev, 'title', '')
+            snippet = getattr(ev, 'snippet', '')
+
+        if not url:
+            continue
+
+        if url in url_to_number:
+            # URL already exists from inline link, add snippet
+            idx = url_to_number[url] - 1
+            if not citations_registry[idx]['snippet'] and snippet:
+                citations_registry[idx]['snippet'] = snippet
+        else:
+            # New URL from evidence
+            number = len(citations_registry) + 1
+            url_to_number[url] = number
+            citations_registry.append({
+                "number": number,
+                "url": url,
+                "text": title,
+                "snippet": snippet
+            })
+
+    # Step 3: Replace markdown links with text + superscript
+    modified_sections = []
+    for section in sections:
+        if not section:
+            modified_sections.append(section)
+            continue
+
+        modified = section
+
+        # Replace each [text](url) with text<sup>[N]</sup>
+        def replace_link(match):
+            link_text = match.group(1)
+            url = match.group(2).strip()
+            number = url_to_number.get(url, '?')
+            return f'{link_text}<sup>[{number}]</sup>'
+
+        modified = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', replace_link, modified)
+        modified_sections.append(modified)
+
+    return modified_sections, citations_registry
 
 
 def generate_subject_line(topic: str, current_date: str = None) -> str:
@@ -671,17 +788,20 @@ def combine_content_html(sections: list, citations: list) -> str:
     Returns:
         Complete HTML body content
     """
-    # Convert all sections to HTML
+    # Extract and number citations from markdown, merge with evidence
+    modified_sections, citations_registry = extract_and_number_citations(sections, citations)
+
+    # Convert modified sections to HTML (now with superscripts instead of inline links)
     sections_html = []
-    for section in sections:
+    for section in modified_sections:
         if section:  # Skip empty sections
             sections_html.append(markdown_to_html(section))
 
     # Join sections
     content_html = '\n'.join(sections_html)
 
-    # Add citations at the end
-    citations_html = render_citations_html(citations)
+    # Render numbered citations from registry
+    citations_html = render_citations_html(citations_registry)
 
     return content_html + citations_html
 
@@ -745,6 +865,7 @@ async def run_batch_research(tasks: list, callback_url: str):
                 "status": "failed",
                 "subject": f"❌ Research Failed: {task.research_topic}",
                 "body": error_html,
+                "isHtml": True,
                 "error": error_message,
                 "executed_at": datetime.utcnow().isoformat()
             }
@@ -842,6 +963,7 @@ async def run_batch_research(tasks: list, callback_url: str):
                 "status": "completed",
                 "subject": generate_subject_line(task.research_topic, current_date),
                 "body": html_body,
+                "isHtml": True,
                 "metadata": {
                     "evidence_count": len(evidence),
                     "executed_at": datetime.utcnow().isoformat(),
@@ -890,6 +1012,7 @@ async def run_batch_research(tasks: list, callback_url: str):
                 "status": "failed",
                 "subject": f"❌ Research Failed: {task.research_topic}",
                 "body": error_html,
+                "isHtml": True,
                 "error": error_message,
                 "executed_at": datetime.utcnow().isoformat()
             }
@@ -1019,6 +1142,7 @@ async def run_manual_research(research_topic: str, callback_url: str, email: str
             "status": "completed",
             "subject": generate_subject_line(research_topic, current_date),
             "body": html_body,
+            "isHtml": True,
             "metadata": {
                 "evidence_count": len(evidence),
                 "executed_at": datetime.utcnow().isoformat(),
@@ -1058,6 +1182,7 @@ async def run_manual_research(research_topic: str, callback_url: str, email: str
             "status": "failed",
             "subject": f"❌ Research Failed: {research_topic}",
             "body": error_html,
+            "isHtml": True,
             "error": error_message,
             "executed_at": datetime.utcnow().isoformat()
         }
