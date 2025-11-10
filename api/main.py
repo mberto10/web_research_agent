@@ -557,6 +557,135 @@ async def execute_manual_research(
         )
 
 
+# --- HTML Email Generation Utilities ---
+
+def markdown_to_html(markdown: str) -> str:
+    """Convert markdown to HTML with basic styling.
+
+    Args:
+        markdown: Markdown text to convert
+
+    Returns:
+        HTML string with inline styling
+    """
+    if not markdown:
+        return ''
+
+    import re
+
+    html = markdown
+
+    # Headers (order matters: h3 before h2 before h1)
+    html = re.sub(r'^### (.+)$', r'<h3 style="color: #4a5568; font-size: 18px; font-weight: 600; margin: 20px 0 10px 0;">\1</h3>', html, flags=re.MULTILINE)
+    html = re.sub(r'^## (.+)$', r'<h2 style="color: #2d3748; font-size: 22px; font-weight: 600; margin: 28px 0 14px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">\1</h2>', html, flags=re.MULTILINE)
+    html = re.sub(r'^# (.+)$', r'<h1 style="color: #1a202c; font-size: 28px; font-weight: 700; margin: 32px 0 16px 0; padding-bottom: 12px; border-bottom: 3px solid #667eea;">\1</h1>', html, flags=re.MULTILINE)
+
+    # Bold and italic
+    html = re.sub(r'\*\*(.+?)\*\*', r'<strong style="color: #2d3748; font-weight: 600;">\1</strong>', html)
+    html = re.sub(r'\*(.+?)\*', r'<em>\1</em>', html)
+
+    # Links
+    html = re.sub(r'\[(.+?)\]\((.+?)\)', r'<a href="\2" style="color: #667eea; text-decoration: none; font-weight: 500;">\1</a>', html)
+
+    # List items
+    html = re.sub(r'^[•\-\*]\s+(.+)$', r'<li style="color: #4a5568; font-size: 15px; line-height: 1.7; margin-bottom: 10px;">\1</li>', html, flags=re.MULTILINE)
+    html = re.sub(r'^\d+\.\s+(.+)$', r'<li style="color: #4a5568; font-size: 15px; line-height: 1.7; margin-bottom: 10px;">\1</li>', html, flags=re.MULTILINE)
+
+    # Wrap consecutive list items in ul tags
+    html = re.sub(r'(<li.*?</li>\n?)+', lambda m: f'<ul style="margin: 0 0 20px 0; padding-left: 24px;">{m.group(0)}</ul>', html, flags=re.DOTALL)
+
+    # Paragraphs (double newlines)
+    html = re.sub(r'\n\n', '</p><p style="color: #4a5568; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;">', html)
+
+    # Single newlines to br
+    html = re.sub(r'\n', '<br>', html)
+
+    # Wrap in paragraph if doesn't start with a block element
+    if not html.startswith('<h') and not html.startswith('<ul') and not html.startswith('<p'):
+        html = f'<p style="color: #4a5568; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;">{html}</p>'
+
+    return html
+
+
+def render_citations_html(citations: list) -> str:
+    """Render citations as styled HTML cards.
+
+    Args:
+        citations: List of citation dicts with title, url, snippet
+
+    Returns:
+        HTML string with citation section
+    """
+    if not citations or len(citations) == 0:
+        return ''
+
+    citation_items = []
+    for idx, citation in enumerate(citations, 1):
+        title = citation.get('title', 'Untitled Source')
+        url = citation.get('url', '#')
+        snippet = citation.get('snippet', '')
+
+        citation_html = f'''
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 12px;">
+                <div style="font-size: 16px; font-weight: 600; color: #2d3748; margin: 0 0 8px 0;">[{idx}] {title}</div>
+                <a href="{url}" style="font-size: 14px; color: #667eea; text-decoration: none; word-break: break-all; display: block; margin-bottom: 8px;">{url}</a>
+                {f'<p style="font-size: 14px; color: #718096; line-height: 1.5; margin: 0;">{snippet}</p>' if snippet else ''}
+            </div>
+        '''
+        citation_items.append(citation_html)
+
+    citations_html = ''.join(citation_items)
+
+    return f'''
+        <div style="background: #f7fafc; border-left: 4px solid #667eea; padding: 24px; margin: 32px 0; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #2d3748; font-size: 20px; border-bottom: none;">📚 Sources & Citations</h2>
+            {citations_html}
+        </div>
+    '''
+
+
+def generate_subject_line(topic: str, current_date: str = None) -> str:
+    """Generate subject line in format: 'Daily Briefing (Date): Topic'.
+
+    Args:
+        topic: Research topic
+        current_date: Date string in natural format (e.g., "November 10, 2025")
+
+    Returns:
+        Formatted subject line
+    """
+    if not current_date:
+        # Fallback to current date if not provided
+        current_date = datetime.utcnow().strftime("%B %d, %Y")
+
+    return f"Daily Briefing ({current_date}): {topic}"
+
+
+def combine_content_html(sections: list, citations: list) -> str:
+    """Combine sections and citations into single HTML body.
+
+    Args:
+        sections: List of markdown section strings
+        citations: List of citation dicts
+
+    Returns:
+        Complete HTML body content
+    """
+    # Convert all sections to HTML
+    sections_html = []
+    for section in sections:
+        if section:  # Skip empty sections
+            sections_html.append(markdown_to_html(section))
+
+    # Join sections
+    content_html = '\n'.join(sections_html)
+
+    # Add citations at the end
+    citations_html = render_citations_html(citations)
+
+    return content_html + citations_html
+
+
 # --- Background Execution Logic ---
 
 async def run_batch_research(tasks: list, callback_url: str):
@@ -599,13 +728,24 @@ async def run_batch_research(tasks: list, callback_url: str):
 
         # Send error webhook for all tasks
         for task in tasks:
+            error_message = f"Failed to initialize research environment: {str(e)}"
+            error_html = f'''
+                <div style="padding: 20px; background: #fee2e2; border-left: 4px solid #dc2626; border-radius: 4px;">
+                    <h3 style="margin-top: 0; color: #991b1b;">Research Generation Failed</h3>
+                    <p style="color: #7f1d1d;"><strong>Topic:</strong> {task.research_topic}</p>
+                    <p style="color: #7f1d1d;"><strong>Error:</strong> {error_message}</p>
+                    <p style="color: #7f1d1d; margin-bottom: 0;">Please try again or contact support if this issue persists.</p>
+                </div>
+            '''
             error_payload = {
                 "task_id": str(task.id),
                 "email": task.email,
                 "research_topic": task.research_topic,
                 "frequency": task.frequency,
                 "status": "failed",
-                "error": f"Failed to initialize research environment: {str(e)}",
+                "subject": f"❌ Research Failed: {task.research_topic}",
+                "body": error_html,
+                "error": error_message,
                 "executed_at": datetime.utcnow().isoformat()
             }
             await send_webhook(callback_url, error_payload)
@@ -687,21 +827,26 @@ async def run_batch_research(tasks: list, callback_url: str):
                         "snippet": getattr(e, "snippet", "")
                     })
 
-            # Format payload
+            # Extract current date from vars for subject line
+            current_date = vars_dict.get("current_date", "")
+
+            # Generate HTML content body
+            html_body = combine_content_html(sections, citations)
+
+            # Format payload with new structure
             payload = {
                 "task_id": str(task.id),
                 "email": task.email,
                 "research_topic": task.research_topic,
                 "frequency": task.frequency,
                 "status": "completed",
-                "result": {
-                    "sections": sections,
-                    "citations": citations,
-                    "metadata": {
-                        "evidence_count": len(evidence),
-                        "executed_at": datetime.utcnow().isoformat(),
-                        "strategy_slug": strategy_slug
-                    }
+                "subject": generate_subject_line(task.research_topic, current_date),
+                "body": html_body,
+                "metadata": {
+                    "evidence_count": len(evidence),
+                    "executed_at": datetime.utcnow().isoformat(),
+                    "strategy_slug": strategy_slug,
+                    "current_date": current_date
                 }
             }
 
@@ -728,13 +873,24 @@ async def run_batch_research(tasks: list, callback_url: str):
             logger.exception("  Full traceback:")
 
             # Send error webhook for this task
+            error_message = str(e)
+            error_html = f'''
+                <div style="padding: 20px; background: #fee2e2; border-left: 4px solid #dc2626; border-radius: 4px;">
+                    <h3 style="margin-top: 0; color: #991b1b;">Research Generation Failed</h3>
+                    <p style="color: #7f1d1d;"><strong>Topic:</strong> {task.research_topic}</p>
+                    <p style="color: #7f1d1d;"><strong>Error:</strong> {error_message}</p>
+                    <p style="color: #7f1d1d; margin-bottom: 0;">Please try again or contact support if this issue persists.</p>
+                </div>
+            '''
             error_payload = {
                 "task_id": str(task.id),
                 "email": task.email,
                 "research_topic": task.research_topic,
                 "frequency": task.frequency,
                 "status": "failed",
-                "error": str(e),
+                "subject": f"❌ Research Failed: {task.research_topic}",
+                "body": error_html,
+                "error": error_message,
                 "executed_at": datetime.utcnow().isoformat()
             }
             logger.info(f"  📤 Sending error webhook...")
@@ -848,21 +1004,26 @@ async def run_manual_research(research_topic: str, callback_url: str, email: str
                     "snippet": getattr(e, "snippet", "")
                 })
 
-        # Format payload
+        # Extract current date from vars for subject line
+        current_date = vars_dict.get("current_date", "")
+
+        # Generate HTML content body
+        html_body = combine_content_html(sections, citations)
+
+        # Format payload with new structure
         payload = {
             "task_id": f"manual-{uuid4()}",  # Generate pseudo task ID for consistency
             "email": email or "manual_user",
             "research_topic": research_topic,
             "frequency": "manual",
             "status": "completed",
-            "result": {
-                "sections": sections,
-                "citations": citations,
-                "metadata": {
-                    "evidence_count": len(evidence),
-                    "executed_at": datetime.utcnow().isoformat(),
-                    "strategy_slug": strategy_slug
-                }
+            "subject": generate_subject_line(research_topic, current_date),
+            "body": html_body,
+            "metadata": {
+                "evidence_count": len(evidence),
+                "executed_at": datetime.utcnow().isoformat(),
+                "strategy_slug": strategy_slug,
+                "current_date": current_date
             }
         }
 
@@ -880,13 +1041,24 @@ async def run_manual_research(research_topic: str, callback_url: str, email: str
         logger.exception("Full traceback:")
 
         # Send error webhook
+        error_message = str(e)
+        error_html = f'''
+            <div style="padding: 20px; background: #fee2e2; border-left: 4px solid #dc2626; border-radius: 4px;">
+                <h3 style="margin-top: 0; color: #991b1b;">Research Generation Failed</h3>
+                <p style="color: #7f1d1d;"><strong>Topic:</strong> {research_topic}</p>
+                <p style="color: #7f1d1d;"><strong>Error:</strong> {error_message}</p>
+                <p style="color: #7f1d1d; margin-bottom: 0;">Please try again or contact support if this issue persists.</p>
+            </div>
+        '''
         error_payload = {
             "task_id": f"manual-{uuid4()}",  # Generate pseudo task ID for consistency
             "email": email or "manual_user",
             "research_topic": research_topic,
             "frequency": "manual",
             "status": "failed",
-            "error": str(e),
+            "subject": f"❌ Research Failed: {research_topic}",
+            "body": error_html,
+            "error": error_message,
             "executed_at": datetime.utcnow().isoformat()
         }
         logger.info(f"📤 Sending error webhook...")

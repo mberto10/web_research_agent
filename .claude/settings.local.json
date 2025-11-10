@@ -82,7 +82,8 @@
       "Bash(if [ -n \"$API_URL\" ])",
       "Bash(then echo \"API URL is set: $API_URL\")",
       "Bash(else echo \"API URL not set in environment\")",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": []

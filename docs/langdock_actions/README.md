@@ -12,9 +12,10 @@ Copy-paste ready JavaScript files for Langdock integration. Each file is a stand
 | `04_delete_research_task.js` | Delete Task | Unsubscribe/remove a research task |
 | `05_execute_batch_research.js` | Execute Batch | Trigger research for all tasks (used by schedulers) |
 | `06_health_check.js` | Health Check | Monitor API availability |
-| `07_webhook_receiver.js` | Webhook Receiver | Process research results and format for email |
+| `07_webhook_receiver.js` | Webhook Receiver | Process research results and format for email (simple) |
 | `08_manual_research_sync.js` | Manual Research (Sync) | On-demand research without database, returns results immediately |
 | `09_manual_research_async.js` | Manual Research (Async) | On-demand research without database, sends results to webhook |
+| `10_email_renderer_complete.js` | Complete Email Renderer | Advanced HTML email formatter with strategy-specific templates |
 
 ## Setup Instructions
 
@@ -145,6 +146,30 @@ Output: Confirmation that research started
 Use Case: On-demand research for long-running queries, results sent to webhook
 ```
 
+#### Action #10: Complete Email Renderer
+```
+Input Fields:
+  - (auto) - Receives data from webhook trigger (webhook1.body)
+
+Output: {success, email, subject, htmlContent, ...metadata}
+
+Features:
+  - Markdown to HTML conversion
+  - Strategy-specific email templates (breaking news, financial alerts, etc.)
+  - Professional gradient header design
+  - Formatted citations with snippets
+  - Responsive mobile-friendly layout
+  - Error handling with fallback emails
+
+Next Action: Chain to Outlook Send Email
+  - To: {output.email}
+  - Subject: {output.subject}
+  - Body: {output.htmlContent}
+  - Body Type: HTML
+
+Use Case: Advanced email formatting for all research types with beautiful HTML templates
+```
+
 ## Workflow Examples
 
 ### User Subscription Flow
@@ -208,6 +233,22 @@ Action: 07_webhook_receiver.js
 Action: Outlook Send Email
 ```
 
+### Complete Email with HTML Templates
+```
+Trigger: Webhook (from batch or manual research)
+  ↓
+Action: 10_email_renderer_complete.js
+  - Automatically processes webhook1.body
+  - Applies strategy-specific templates
+  - Converts markdown to beautiful HTML
+  ↓
+Action: Outlook Send Email
+  - To: {previousStep.email}
+  - Subject: {previousStep.subject}
+  - Body: {previousStep.htmlContent}
+  - Body Type: HTML
+```
+
 ## Testing Checklist
 
 ### Core Actions (1-7)
@@ -225,6 +266,14 @@ Action: Outlook Send Email
 - [ ] Action #9: Manual async triggers and sends to webhook
 - [ ] Manual sync → Email sender works correctly
 - [ ] Manual async → Webhook → Email sender works correctly
+
+### Advanced Email Renderer (10)
+- [ ] Action #10: Processes webhook1.body correctly
+- [ ] Action #10: Renders HTML email with proper formatting
+- [ ] Action #10: Applies correct strategy-specific templates
+- [ ] Action #10: Handles failed research status gracefully
+- [ ] Action #10: Citations display with proper styling
+- [ ] Webhook → Email renderer → Outlook works end-to-end
 
 ## API Configuration
 
