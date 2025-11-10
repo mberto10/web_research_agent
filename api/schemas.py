@@ -11,6 +11,7 @@ class TaskCreate(BaseModel):
     """Schema for creating a new research task."""
     email: EmailStr
     research_topic: str = Field(
+        min_length=1,
         max_length=500,
         description="Research topic (max 500 characters)"
     )
@@ -26,6 +27,7 @@ class TaskUpdate(BaseModel):
     """Schema for updating an existing task."""
     research_topic: str | None = Field(
         default=None,
+        min_length=1,
         max_length=500,
         description="Research topic (max 500 characters)"
     )
@@ -67,6 +69,7 @@ class BatchExecuteResponse(BaseModel):
 class ManualResearchRequest(BaseModel):
     """Schema for manual research execution request."""
     research_topic: str = Field(
+        min_length=1,
         max_length=500,
         description="Research topic (max 500 characters)"
     )

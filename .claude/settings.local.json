@@ -81,7 +81,8 @@
       "Bash(else echo \"✗ LANGFUSE_SECRET_KEY is not set\")",
       "Bash(if [ -n \"$API_URL\" ])",
       "Bash(then echo \"API URL is set: $API_URL\")",
-      "Bash(else echo \"API URL not set in environment\")"
+      "Bash(else echo \"API URL not set in environment\")",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": [],
     "ask": []

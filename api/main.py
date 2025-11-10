@@ -3,7 +3,7 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 from pydantic import EmailStr
 import os
 import logging
@@ -476,7 +476,11 @@ async def execute_manual_research(
                 "mode": "manual_sync"
             }
         ) as trace_ctx:
-            result = await graph.ainvoke(State(user_request=request.research_topic), {})
+            # Generate unique thread_id for this manual research execution
+            thread_id = f"manual-sync-{uuid4()}"
+            config = {"configurable": {"thread_id": thread_id}}
+
+            result = await graph.ainvoke(State(user_request=request.research_topic), config)
 
             # Extract vars from result
             vars_dict = result.get("vars", {}) if isinstance(result, dict) else result.vars
@@ -518,7 +522,11 @@ async def execute_manual_research(
                 })
 
         # Flush traces
-        flush_traces()
+        try:
+            flush_traces()
+            logger.info("📊 Traces flushed to Langfuse")
+        except Exception as flush_error:
+            logger.warning(f"⚠️ Failed to flush traces: {flush_error}")
 
         logger.info(f"✅ Manual research completed: {len(sections)} sections, {len(evidence)} evidence")
 
@@ -791,7 +799,11 @@ async def run_manual_research(research_topic: str, callback_url: str, email: str
                 "callback_url": callback_url
             }
         ) as trace_ctx:
-            result = await graph.ainvoke(State(user_request=research_topic), {})
+            # Generate unique thread_id for this manual research execution
+            thread_id = f"manual-async-{uuid4()}"
+            config = {"configurable": {"thread_id": thread_id}}
+
+            result = await graph.ainvoke(State(user_request=research_topic), config)
 
             # Extract vars from result
             vars_dict = result.get("vars", {}) if isinstance(result, dict) else result.vars
@@ -838,6 +850,7 @@ async def run_manual_research(research_topic: str, callback_url: str, email: str
 
         # Format payload
         payload = {
+            "task_id": f"manual-{uuid4()}",  # Generate pseudo task ID for consistency
             "email": email or "manual_user",
             "research_topic": research_topic,
             "frequency": "manual",
@@ -868,6 +881,7 @@ async def run_manual_research(research_topic: str, callback_url: str, email: str
 
         # Send error webhook
         error_payload = {
+            "task_id": f"manual-{uuid4()}",  # Generate pseudo task ID for consistency
             "email": email or "manual_user",
             "research_topic": research_topic,
             "frequency": "manual",
