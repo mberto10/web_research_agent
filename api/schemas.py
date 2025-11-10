@@ -64,6 +64,31 @@ class BatchExecuteResponse(BaseModel):
     started_at: str
 
 
+class ManualResearchRequest(BaseModel):
+    """Schema for manual research execution request."""
+    research_topic: str = Field(
+        max_length=500,
+        description="Research topic (max 500 characters)"
+    )
+    callback_url: str | None = Field(
+        default=None,
+        description="Optional webhook URL to send results to"
+    )
+    email: EmailStr | None = Field(
+        default=None,
+        description="Optional email to send results to (for tracking in Langfuse)"
+    )
+
+
+class ManualResearchResponse(BaseModel):
+    """Schema for manual research response."""
+    status: str
+    research_topic: str
+    started_at: str
+    result: Dict[str, Any] | None = None
+    error: str | None = None
+
+
 # ============================================================================
 # STRATEGY SCHEMAS
 # ============================================================================

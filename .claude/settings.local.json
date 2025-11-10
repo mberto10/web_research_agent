@@ -71,7 +71,17 @@
       "Bash(/tmp/call_admin_endpoint.sh)",
       "Bash(/tmp/trigger_batch.sh)",
       "Skill(langfuse-advanced-filters)",
-      "Bash(/tmp/fetch_strategies.sh)"
+      "Bash(/tmp/fetch_strategies.sh)",
+      "Skill(batch-execution-validator)",
+      "Bash(if [ -n \"$LANGFUSE_PUBLIC_KEY\" ])",
+      "Bash(then echo \"✓ LANGFUSE_PUBLIC_KEY is set\")",
+      "Bash(else echo \"✗ LANGFUSE_PUBLIC_KEY is not set\")",
+      "Bash(if [ -n \"$LANGFUSE_SECRET_KEY\" ])",
+      "Bash(then echo \"✓ LANGFUSE_SECRET_KEY is set\")",
+      "Bash(else echo \"✗ LANGFUSE_SECRET_KEY is not set\")",
+      "Bash(if [ -n \"$API_URL\" ])",
+      "Bash(then echo \"API URL is set: $API_URL\")",
+      "Bash(else echo \"API URL not set in environment\")"
     ],
     "deny": [],
     "ask": []

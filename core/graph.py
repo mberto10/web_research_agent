@@ -1185,15 +1185,71 @@ def finalize(state: State) -> State:
         if overrides:
             inputs.update(overrides)
         results = _execute_use(sdict.get("use", ""), inputs)
-        
+
         # Only add to evidence if NOT saving to vars (avoid duplication)
         if sdict.get("save_as"):
             state.vars[sdict["save_as"]] = results
+
+            # DEBUG: Log step details
+            logger.info(f"📝 FINALIZE: Step with save_as='{sdict.get('save_as')}'")
+            logger.info(f"📝 FINALIZE: use='{sdict.get('use')}', phase='{sdict.get('phase')}'")
+            logger.info(f"📝 FINALIZE: results type={type(results)}, is list={isinstance(results, list)}")
+
+            # Parse sections if this is llm_analyzer output
+            use_value = sdict.get("use", "")
+            should_parse = "llm_analyzer" in use_value
+
+            logger.info(f"📝 FINALIZE: Checking if should parse: use='{use_value}', contains llm_analyzer={should_parse}, is list={isinstance(results, list)}")
+
+            if should_parse and results:
+                logger.info(f"📝 FINALIZE: Will attempt parsing - results type: {type(results)}")
+
+                # Handle both list and single Evidence object
+                evidence_items = results if isinstance(results, list) else [results]
+
+                for item in evidence_items:
+                    if hasattr(item, 'snippet') and item.snippet:
+                        snippet = item.snippet
+                        logger.info(f"📝 FINALIZE: Found snippet with {len(snippet)} chars - parsing into sections...")
+                        try:
+                            _parse_sections_from_content(state, snippet)
+                            logger.info(f"📝 FINALIZE: Parsing complete! state.sections now has {len(state.sections)} sections")
+                            break  # Only parse first valid snippet
+                        except Exception as e:
+                            logger.error(f"❌ FINALIZE: Error parsing sections: {e}")
+                            import traceback
+                            traceback.print_exc()
+                    else:
+                        logger.warning(f"⚠️ FINALIZE: Evidence item missing snippet: type={type(item)}, has_snippet={hasattr(item, 'snippet')}")
         else:
             _maybe_add_evidence(results, task_evidence)
 
     # Merge evidence
     state.evidence.extend(_dedupe_and_score(task_evidence, None))
+
+    # FALLBACK: Parse sections from briefing_content if sections are still empty
+    if not state.sections and "briefing_content" in state.vars:
+        logger.info(f"📝 FINALIZE: Fallback - parsing sections from state.vars['briefing_content']")
+        briefing_content = state.vars["briefing_content"]
+
+        # Handle list of Evidence objects or single Evidence
+        if isinstance(briefing_content, list) and briefing_content:
+            for item in briefing_content:
+                if hasattr(item, 'snippet') and item.snippet:
+                    logger.info(f"📝 FINALIZE: Fallback found snippet with {len(item.snippet)} chars")
+                    try:
+                        _parse_sections_from_content(state, item.snippet)
+                        logger.info(f"📝 FINALIZE: Fallback parsing complete! {len(state.sections)} sections")
+                        break
+                    except Exception as e:
+                        logger.error(f"❌ FINALIZE: Fallback parsing error: {e}")
+        elif hasattr(briefing_content, 'snippet') and briefing_content.snippet:
+            logger.info(f"📝 FINALIZE: Fallback found single Evidence snippet")
+            try:
+                _parse_sections_from_content(state, briefing_content.snippet)
+                logger.info(f"📝 FINALIZE: Fallback parsing complete! {len(state.sections)} sections")
+            except Exception as e:
+                logger.error(f"❌ FINALIZE: Fallback parsing error: {e}")
 
     # Capture output
     if lf_client:
@@ -1356,6 +1412,56 @@ def _finalize_writer_llm(
         )
 
     return report_content
+
+
+def _parse_sections_from_content(state: State, content: str) -> None:
+    """Parse markdown sections from LLM-generated content into state.sections.
+
+    Supports both ## markdown headers and plain text content.
+    Handles deduplication of sections and logs parsed results.
+
+    Args:
+        state: State object to populate sections into
+        content: Raw LLM output text to parse
+    """
+    if not content or not content.strip():
+        logger.warning("⚠️ FINALIZE: Empty content provided for section parsing")
+        return
+
+    # Parse sections from the report
+    if "## " in content:
+        # Split by ## but keep the headers
+        parts = content.split("## ")
+        for part in parts[1:]:  # Skip the first empty part
+            if part.strip():
+                state.sections.append(f"## {part.strip()}")
+    else:
+        # If no sections found, add as single section
+        state.sections.append(content)
+
+    # DEDUPLICATION: Remove duplicate sections
+    if len(state.sections) > 1:
+        unique_sections = []
+        seen = set()
+
+        for section in state.sections:
+            # Use first 200 chars as fingerprint
+            fingerprint = section[:200].strip()
+            if fingerprint not in seen:
+                unique_sections.append(section)
+                seen.add(fingerprint)
+            else:
+                logger.warning(f"⚠️ FINALIZE: Removed duplicate section")
+
+        if len(unique_sections) != len(state.sections):
+            logger.info(f"📝 FINALIZE: Deduplication: {len(state.sections)} → {len(unique_sections)} sections")
+            state.sections = unique_sections
+
+    # DEBUG: Log parsed sections
+    logger.info(f"📝 FINALIZE: Parsed into {len(state.sections)} sections:")
+    for i, section in enumerate(state.sections):
+        preview = section[:150].replace('\n', ' ')
+        logger.info(f"  Section {i+1}: {len(section)} chars - {preview}...")
 
 
 def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, Any]) -> State:
@@ -1606,40 +1712,8 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
         except Exception:
             pass
 
-        # Parse sections from the report
-        if "## " in report_content:
-            # Split by ## but keep the headers
-            parts = report_content.split("## ")
-            for part in parts[1:]:  # Skip the first empty part
-                if part.strip():
-                    state.sections.append(f"## {part.strip()}")
-        else:
-            # If no sections found, add as single section
-            state.sections.append(report_content)
-
-        # DEDUPLICATION: Remove duplicate sections
-        if len(state.sections) > 1:
-            unique_sections = []
-            seen = set()
-
-            for section in state.sections:
-                # Use first 200 chars as fingerprint
-                fingerprint = section[:200].strip()
-                if fingerprint not in seen:
-                    unique_sections.append(section)
-                    seen.add(fingerprint)
-                else:
-                    logger.warning(f"⚠️ FINALIZE: Removed duplicate section")
-
-            if len(unique_sections) != len(state.sections):
-                logger.info(f"📝 FINALIZE: Deduplication: {len(state.sections)} → {len(unique_sections)} sections")
-                state.sections = unique_sections
-
-        # DEBUG: Log parsed sections
-        logger.info(f"📝 FINALIZE: Parsed into {len(state.sections)} sections:")
-        for i, section in enumerate(state.sections):
-            preview = section[:150].replace('\n', ' ')
-            logger.info(f"  Section {i+1}: {len(section)} chars - {preview}...")
+        # Parse sections from the report using helper function
+        _parse_sections_from_content(state, report_content)
 
     except Exception as e:
         # Fallback to original behavior if ReAct fails

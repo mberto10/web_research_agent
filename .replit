@@ -89,6 +89,11 @@ localPort = 57754
 externalPort = 8008
 
 [[ports]]
+localPort = 58086
+externalPort = 9000
+exposeLocalhost = true
+
+[[ports]]
 localPort = 58362
 externalPort = 6800
 

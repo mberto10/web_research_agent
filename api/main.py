@@ -402,6 +402,153 @@ async def execute_batch(
     )
 
 
+@app.post(
+    "/execute/manual",
+    response_model=schemas.ManualResearchResponse,
+    dependencies=[Depends(verify_api_key)],
+    summary="Execute manual research"
+)
+async def execute_manual_research(
+    request: schemas.ManualResearchRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """Execute a manual research task without database storage.
+
+    This endpoint:
+    1. Accepts a research topic directly
+    2. Runs the full research architecture
+    3. Returns results directly or sends to webhook
+
+    Args:
+        request: Manual research request (topic, optional callback_url, optional email)
+        background_tasks: FastAPI background tasks
+        db: Database session
+
+    Returns:
+        Execution status with results (if synchronous) or confirmation (if async with webhook)
+    """
+    logger.info(f"📥 Manual research request received: {request.research_topic}")
+    started_at = datetime.utcnow()
+
+    # If callback_url provided, execute in background
+    if request.callback_url:
+        logger.info(f"📞 Callback URL provided: {request.callback_url}")
+        logger.info("🚀 Starting background execution...")
+
+        background_tasks.add_task(
+            run_manual_research,
+            request.research_topic,
+            request.callback_url,
+            request.email
+        )
+
+        return schemas.ManualResearchResponse(
+            status="running",
+            research_topic=request.research_topic,
+            started_at=started_at.isoformat()
+        )
+
+    # Otherwise execute synchronously and return results
+    logger.info("🔄 Executing synchronously...")
+
+    try:
+        from core.graph import build_graph
+        from core.state import State
+        from tools import register_default_adapters
+        from core.langfuse_tracing import workflow_span, flush_traces
+
+        # Initialize research tools
+        register_default_adapters()
+        graph = build_graph()
+
+        # Execute research with tracing
+        with workflow_span(
+            name=f"Manual Research: {request.research_topic[:50]}...",
+            trace_input={
+                "research_topic": request.research_topic,
+                "email": request.email,
+                "mode": "manual_sync"
+            },
+            user_id=request.email or "manual_user",
+            tags=["api", "manual_execution", "synchronous"],
+            metadata={
+                "mode": "manual_sync"
+            }
+        ) as trace_ctx:
+            result = await graph.ainvoke(State(user_request=request.research_topic), {})
+
+            # Extract vars from result
+            vars_dict = result.get("vars", {}) if isinstance(result, dict) else result.vars
+
+            # Extract the full report from briefing_content
+            full_report = ""
+            briefing_content = vars_dict.get("briefing_content")
+            if briefing_content:
+                if isinstance(briefing_content, list) and len(briefing_content) > 0:
+                    evidence_obj = briefing_content[0]
+                    if hasattr(evidence_obj, 'snippet') and evidence_obj.snippet:
+                        full_report = evidence_obj.snippet
+
+            # Update trace with full report as output
+            trace_ctx.update_trace(output=full_report)
+
+        # Extract results
+        sections = result.get("sections") if isinstance(result, dict) else result.sections
+        evidence = result.get("evidence", []) if isinstance(result, dict) else result.evidence
+        strategy_slug = result.get("strategy_slug") if isinstance(result, dict) else getattr(result, "strategy_slug", None)
+
+        sections = sections or []
+        evidence = evidence or []
+
+        # Format citations
+        citations = []
+        for e in evidence[:10]:
+            if isinstance(e, dict):
+                citations.append({
+                    "title": e.get("title", "No title"),
+                    "url": e.get("url", ""),
+                    "snippet": e.get("snippet", "")
+                })
+            else:
+                citations.append({
+                    "title": getattr(e, "title", "No title"),
+                    "url": getattr(e, "url", ""),
+                    "snippet": getattr(e, "snippet", "")
+                })
+
+        # Flush traces
+        flush_traces()
+
+        logger.info(f"✅ Manual research completed: {len(sections)} sections, {len(evidence)} evidence")
+
+        return schemas.ManualResearchResponse(
+            status="completed",
+            research_topic=request.research_topic,
+            started_at=started_at.isoformat(),
+            result={
+                "sections": sections,
+                "citations": citations,
+                "metadata": {
+                    "evidence_count": len(evidence),
+                    "executed_at": datetime.utcnow().isoformat(),
+                    "strategy_slug": strategy_slug
+                }
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Manual research failed: {e}")
+        logger.exception("Full traceback:")
+
+        return schemas.ManualResearchResponse(
+            status="failed",
+            research_topic=request.research_topic,
+            started_at=started_at.isoformat(),
+            error=str(e)
+        )
+
+
 # --- Background Execution Logic ---
 
 async def run_batch_research(tasks: list, callback_url: str):
@@ -487,11 +634,21 @@ async def run_batch_research(tasks: list, callback_url: str):
                 config = {"configurable": {"thread_id": str(task.id)}}
                 result = await graph.ainvoke(State(user_request=task.research_topic), config)
 
-                # Update trace with successful completion
-                trace_ctx.update_trace(
-                    output={"status": "completed"},
-                    metadata={"stage": "research_completed"}
-                )
+                # Extract vars from result (same pattern as sections/evidence)
+                vars_dict = result.get("vars", {}) if isinstance(result, dict) else result.vars
+
+                # Extract the full report from briefing_content
+                full_report = ""  # Default to empty string
+                briefing_content = vars_dict.get("briefing_content")
+                if briefing_content:
+                    # briefing_content is a list of Evidence objects
+                    if isinstance(briefing_content, list) and len(briefing_content) > 0:
+                        evidence_obj = briefing_content[0]
+                        if hasattr(evidence_obj, 'snippet') and evidence_obj.snippet:
+                            full_report = evidence_obj.snippet
+
+                # Update trace with ONLY the full report as output
+                trace_ctx.update_trace(output=full_report)
 
             logger.info(f"  ✅ Research completed")
 
@@ -577,6 +734,152 @@ async def run_batch_research(tasks: list, callback_url: str):
 
     logger.info(f"\n{'='*60}")
     logger.info(f"✅ BATCH EXECUTION COMPLETE: {len(tasks)} tasks processed")
+    logger.info(f"{'='*60}\n")
+
+    # Flush all traces to Langfuse
+    try:
+        flush_traces()
+        logger.info("📊 Traces flushed to Langfuse")
+    except Exception as flush_error:
+        logger.warning(f"⚠️ Failed to flush traces: {flush_error}")
+
+
+async def run_manual_research(research_topic: str, callback_url: str, email: str = None):
+    """Execute manual research and send results to webhook.
+
+    Args:
+        research_topic: The research topic to investigate
+        callback_url: Webhook URL to send results to
+        email: Optional email for tracking (used in Langfuse)
+    """
+    logger.info(f"\n{'='*60}")
+    logger.info(f"🎯 MANUAL RESEARCH STARTED")
+    logger.info(f"   Topic: {research_topic}")
+    logger.info(f"{'='*60}\n")
+
+    try:
+        logger.info("📦 Importing research modules...")
+        from core.graph import build_graph
+        from core.state import State
+        from tools import register_default_adapters
+        from core.langfuse_tracing import workflow_span, flush_traces
+        logger.info("✅ Imports successful")
+
+        # Initialize research tools
+        logger.info("🔧 Registering default adapters...")
+        register_default_adapters()
+        logger.info("✅ Adapters registered")
+
+        logger.info("🏗️ Building research graph...")
+        graph = build_graph()
+        logger.info("✅ Graph built successfully")
+
+        # Execute research with tracing
+        logger.info(f"🚀 Invoking research graph...")
+
+        with workflow_span(
+            name=f"Manual Research: {research_topic[:50]}...",
+            trace_input={
+                "research_topic": research_topic,
+                "email": email,
+                "mode": "manual_async"
+            },
+            user_id=email or "manual_user",
+            tags=["api", "manual_execution", "asynchronous"],
+            metadata={
+                "mode": "manual_async",
+                "callback_url": callback_url
+            }
+        ) as trace_ctx:
+            result = await graph.ainvoke(State(user_request=research_topic), {})
+
+            # Extract vars from result
+            vars_dict = result.get("vars", {}) if isinstance(result, dict) else result.vars
+
+            # Extract the full report from briefing_content
+            full_report = ""
+            briefing_content = vars_dict.get("briefing_content")
+            if briefing_content:
+                if isinstance(briefing_content, list) and len(briefing_content) > 0:
+                    evidence_obj = briefing_content[0]
+                    if hasattr(evidence_obj, 'snippet') and evidence_obj.snippet:
+                        full_report = evidence_obj.snippet
+
+            # Update trace with full report as output
+            trace_ctx.update_trace(output=full_report)
+
+        logger.info(f"✅ Research completed")
+
+        # Extract results
+        sections = result.get("sections") if isinstance(result, dict) else result.sections
+        evidence = result.get("evidence", []) if isinstance(result, dict) else result.evidence
+        strategy_slug = result.get("strategy_slug") if isinstance(result, dict) else getattr(result, "strategy_slug", None)
+
+        sections = sections or []
+        evidence = evidence or []
+
+        logger.info(f"📊 Sections: {len(sections)}, Evidence: {len(evidence)}")
+
+        # Format citations
+        citations = []
+        for e in evidence[:10]:
+            if isinstance(e, dict):
+                citations.append({
+                    "title": e.get("title", "No title"),
+                    "url": e.get("url", ""),
+                    "snippet": e.get("snippet", "")
+                })
+            else:
+                citations.append({
+                    "title": getattr(e, "title", "No title"),
+                    "url": getattr(e, "url", ""),
+                    "snippet": getattr(e, "snippet", "")
+                })
+
+        # Format payload
+        payload = {
+            "email": email or "manual_user",
+            "research_topic": research_topic,
+            "frequency": "manual",
+            "status": "completed",
+            "result": {
+                "sections": sections,
+                "citations": citations,
+                "metadata": {
+                    "evidence_count": len(evidence),
+                    "executed_at": datetime.utcnow().isoformat(),
+                    "strategy_slug": strategy_slug
+                }
+            }
+        }
+
+        # Send webhook
+        logger.info(f"📤 Sending webhook to: {callback_url}")
+        success = await send_webhook(callback_url, payload)
+
+        if success:
+            logger.info(f"✅ Webhook sent successfully")
+        else:
+            logger.error(f"❌ Webhook failed to send")
+
+    except Exception as e:
+        logger.error(f"❌ Error processing manual research: {e}")
+        logger.exception("Full traceback:")
+
+        # Send error webhook
+        error_payload = {
+            "email": email or "manual_user",
+            "research_topic": research_topic,
+            "frequency": "manual",
+            "status": "failed",
+            "error": str(e),
+            "executed_at": datetime.utcnow().isoformat()
+        }
+        logger.info(f"📤 Sending error webhook...")
+        await send_webhook(callback_url, error_payload)
+
+    logger.info(f"\n{'='*60}")
+    logger.info(f"✅ MANUAL RESEARCH COMPLETE")
     logger.info(f"{'='*60}\n")
 
     # Flush all traces to Langfuse

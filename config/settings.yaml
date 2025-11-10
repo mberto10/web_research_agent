@@ -3,33 +3,21 @@ llm:
   # Global defaults applied to core LangGraph nodes. Each section maps directly
   # to helper functions in `core/config.py`, which in turn are consumed at the
   # following integration points:
-  #   - fill/summarize/qc/analyzer/cluster -> get_llm_config(...)
-  #   - nodes.*                            -> get_node_llm_config(...)
+  #   - analyzer/cluster -> get_llm_config(...)
+  #   - nodes.*          -> get_node_llm_config(...)
   # Changing these values alters which foundation model (and tuning params)
   # every workflow node invokes by default.
   # ---------------------------------------------------------------------------
   defaults:
-    # LLM used when the fill phase asks for runtime parameter generation
-    fill:
-      model: gpt-5-mini
-      temperature: 0.3
-    # Model for evidence clustering / summarization steps
-    summarize:
-      model: gpt-5-mini
-      temperature: 0.2
-    # Guardrails invoked during the QC node (`core/graph.qc`)
-    qc:
-      model: gpt-5-mini
-      temperature: 0
     # Tool adapter `LLMAnalyzerAdapter` (used by strategies that synthesize
     # whole briefings inside finalize/write phases)
     analyzer:
       model: gpt-5-mini
-      temperature: 0.3
+      temperature: 1
     # Utility model invoked by `_cluster_llm` during evidence grouping
     cluster:
       model: gpt-5-mini
-      temperature: 0.2
+      temperature: 1
     # Node-level overrides. Each key matches a LangGraph node or helper that
     # calls `get_node_llm_config`.
     nodes:
@@ -40,23 +28,21 @@ llm:
       # Used by `_refine_queries_with_llm` to propose follow-up searches
       query_refiner:
         model: gpt-5-mini
-        temperature: 0
+        temperature: 1
       # Governs the ReAct finalize loop in `_finalize_reactive`
       finalize_react:
         model: gpt-5-mini
-        temperature: 0
+        temperature: 1
       # Adapter-specific override for the LLM analyzer tool
       llm_analyzer:
         model: gpt-5-mini
-        temperature: 0.3
+        temperature: 1
 
   # Strategy-specific overrides. When a YAML strategy is selected, values below
   # replace the defaults for the matching slug. Useful for tailoring distinct
   # workflows without code changes.
   per_strategy:
     daily_news_briefing:
-      fill:
-        temperature: 0.4  # Encourage more diverse search params for breaking news
       analyzer:
         model: gpt-5-mini
       nodes:
@@ -68,45 +54,10 @@ llm:
 
 prompts:
   # ---------------------------------------------------------------------------
-  # Prompt templates consumed by `get_prompt` and `get_node_prompt`. Each block
-  # directly maps to a LangGraph node or helper. Editing the copy here changes
-  # the instruction set fed to the corresponding LLM call.
+  # Prompt templates consumed by `get_node_prompt`. Each block directly maps
+  # to a LangGraph node or helper. Editing the copy here changes the instruction
+  # set fed to the corresponding LLM call.
   # ---------------------------------------------------------------------------
-  fill:
-    instructions: |
-      Analyze the task context and generate appropriate search parameters.
-      Consider multiple perspectives and angles to ensure comprehensive coverage.
-      Provide specific, actionable values that will yield relevant results.
-      Only include the requested keys in your JSON response.
-  summarize:
-    template: |
-      Synthesize the following evidence into coherent themes:
-      {lines}
-      
-      Structure your analysis:
-      1. Main Themes (3-5 key patterns or topics)
-      2. Supporting Evidence (specific examples with sources)
-      3. Gaps or Contradictions (if any)
-      4. Key Takeaways (actionable insights)
-      
-      Maintain clear source attribution throughout.
-  qc:
-    system: |
-      You are a research quality analyst. Evaluate the provided content for:
-      
-      1. GROUNDING: Every claim must have citation support
-      2. CONSISTENCY: Check for contradictions between sources
-      3. COMPLETENESS: Identify any obvious gaps in coverage
-      4. ACCURACY: Verify interpretations match source material
-      
-      Respond with JSON:
-      {
-        "grounded": boolean,
-        "consistency_issues": ["list any contradictions"],
-        "coverage_gaps": ["list missing areas"],
-        "warnings": ["specific quality issues"],
-        "improvement_suggestions": ["actionable recommendations"]
-      }
   nodes:
     # Used by `core/scope._llm_scope` for classification (required - no fallback)
     scope_classifier: |

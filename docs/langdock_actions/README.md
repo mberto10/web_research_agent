@@ -13,15 +13,18 @@ Copy-paste ready JavaScript files for Langdock integration. Each file is a stand
 | `05_execute_batch_research.js` | Execute Batch | Trigger research for all tasks (used by schedulers) |
 | `06_health_check.js` | Health Check | Monitor API availability |
 | `07_webhook_receiver.js` | Webhook Receiver | Process research results and format for email |
+| `08_manual_research_sync.js` | Manual Research (Sync) | On-demand research without database, returns results immediately |
+| `09_manual_research_async.js` | Manual Research (Async) | On-demand research without database, sends results to webhook |
 
 ## Setup Instructions
 
 **Setup Order:**
 1. Add apiKey to Langdock auth
-2. Create all 7 actions
+2. Create actions 1-7 (core subscription system)
 3. Create webhook receiver workflow → Get webhook URL
 4. Add callbackUrl to Langdock auth
 5. Create scheduled triggers (daily/weekly/monthly)
+6. (Optional) Create actions 8-9 for on-demand manual research
 
 ### 1. Add Authentication to Langdock
 
@@ -113,6 +116,35 @@ Next Action: Chain to Outlook Send Email
   - Body Type: HTML
 ```
 
+#### Action #8: Manual Research (Synchronous)
+```
+Input Fields:
+  - researchTopic (text, required)
+  - email (text, optional) - For Langfuse tracking
+
+Authentication:
+  - apiKey (secret, required)
+
+Output: Formatted webhook payload compatible with email sender
+
+Use Case: On-demand research without database storage, returns results immediately
+```
+
+#### Action #9: Manual Research (Asynchronous)
+```
+Input Fields:
+  - researchTopic (text, required)
+  - email (text, optional) - For Langfuse tracking
+
+Authentication:
+  - apiKey (secret, required)
+  - callbackUrl (text, required) - Webhook URL for receiving results
+
+Output: Confirmation that research started
+
+Use Case: On-demand research for long-running queries, results sent to webhook
+```
+
 ## Workflow Examples
 
 ### User Subscription Flow
@@ -146,8 +178,39 @@ Action: Outlook Send Email
   - Body Type: HTML
 ```
 
+### On-Demand Research (Sync)
+```
+Trigger: Chat/Form
+  ↓
+Action: 08_manual_research_sync.js
+  - researchTopic: {user input}
+  ↓
+Action: 07_webhook_receiver.js
+  - Use output.webhook_payload as input
+  ↓
+Action: Outlook Send Email
+```
+
+### On-Demand Research (Async)
+```
+Trigger: Chat/Form
+  ↓
+Action: 09_manual_research_async.js
+  - researchTopic: {user input}
+  ↓
+Action: Send "Research started" message
+
+Webhook Workflow:
+Trigger: Webhook
+  ↓
+Action: 07_webhook_receiver.js
+  ↓
+Action: Outlook Send Email
+```
+
 ## Testing Checklist
 
+### Core Actions (1-7)
 - [ ] Action #1: Create task successfully returns task ID
 - [ ] Action #2: Get tasks returns array for test email
 - [ ] Action #3: Update modifies task fields
@@ -156,6 +219,12 @@ Action: Outlook Send Email
 - [ ] Action #6: Health check returns {"status": "healthy"}
 - [ ] Action #7: Webhook receiver formats email correctly
 - [ ] End-to-end: Create → Schedule → Receive email
+
+### Manual Research Actions (8-9)
+- [ ] Action #8: Manual sync returns results with webhook_payload
+- [ ] Action #9: Manual async triggers and sends to webhook
+- [ ] Manual sync → Email sender works correctly
+- [ ] Manual async → Webhook → Email sender works correctly
 
 ## API Configuration
 
