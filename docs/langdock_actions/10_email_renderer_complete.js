@@ -26,15 +26,28 @@ const markdownToHtml = (markdown) => {
     if (!markdown) return '';
 
     let html = markdown
+        // Headers
         .replace(/^### (.+)$/gm, '<h3>$1</h3>')
         .replace(/^## (.+)$/gm, '<h2>$1</h2>')
         .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        // Bold and italic
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Links
         .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" style="color: #667eea; text-decoration: none;">$1</a>')
+        // Source citations in the Sources section: [1] Source Name... -> anchored links
+        .replace(/^\[(\d+)\]\s+(.+?)(https?:\/\/[^\s]+)$/gm, (match, num, source, url) => {
+            return `<span id="cite-${num}" style="display: block; margin-bottom: 8px;"><strong style="color: #667eea;">[${num}]</strong> ${source.trim()}<a href="${url}" style="color: #667eea; text-decoration: none; word-break: break-all;">${url}</a></span>`;
+        })
+        // Inline citations: [1] or [2][3] -> superscript links to sources
+        .replace(/\[(\d+)\]/g, '<sup><a href="#cite-$1" style="color: #667eea; text-decoration: none; font-weight: 600;">[$1]</a></sup>')
+        // Lists
         .replace(/^[•\-\*]\s+(.+)$/gm, '<li>$1</li>')
         .replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>')
         .replace(/(<li>.*<\/li>\n?)+/gs, match => `<ul>${match}</ul>`)
+        // Horizontal rules
+        .replace(/^---$/gm, '<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">')
+        // Paragraphs
         .replace(/\n\n/g, '</p><p>')
         .replace(/\n/g, '<br>');
 

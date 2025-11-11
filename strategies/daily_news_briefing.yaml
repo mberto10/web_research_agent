@@ -44,68 +44,100 @@ tool_chain:
     max_tokens: 4000
     inputs:
       prompt: |
-        Create a CONCISE daily news briefing (max 2000 words) from the following research results.
+        Create a CONCISE daily news briefing from the following research results.
 
         Topic: {{topic}}
         Current Date: {{current_date}}
         Timeframe: {{start_date_natural}} to {{end_date_natural}}
 
-        Research Evidence ({{evidence_count}} items total, showing top 50):
+        Research Evidence ({{evidence_count}} items total):
         {{evidence_text}}
-        
-        Please create a well-structured briefing with the following sections:
-        
-        1. EXECUTIVE SUMMARY
-        Write a 2-3 sentence overview of the most important developments including the most important URLs.
-        
-        2. KEY DEVELOPMENTS
-        List 3-5 major news items, each formatted as:
-        • Headline: specific development (2-3 sentences with key facts, numbers, dates, people involved)
-          Source: (Date) [URL]
-        
-        3. ANALYSIS BY THEME
-        Create 2-3 thematic sections based on what's most relevant to "{{topic}}".
-        Choose themes that reflect the actual news (e.g., "New Drug Approvals", "Supply Chain Disruptions", "Price Changes", "Clinical Trial Results", "Company Acquisitions", "Regulatory Decisions", etc.)
 
-        For each theme (keep concise, 3-5 bullet points max):
-        - Theme title
-        - Brief overview (1 sentence)
-        - 3-5 bullet points with specific, newsworthy information:
-          • Concrete fact or development (Date) [Source URL]
-        
-        DO NOT include:
-        - Generic descriptions of websites or resources
-        - Explanations of what organizations do
-        - Background context that isn't news
-        ONLY include:
-        - Actual events, announcements, changes
-        - Specific data, numbers, names
-        - Recent developments and their direct impacts
-        
-        4. NOTABLE MENTIONS
-        Brief bullet points (max 5) of other relevant but less critical updates
-        Each with format: "• Specific news item (Date) [Source URL]"
+        ---
 
-        5. KEY SOURCES
-        Top 10 most important sources used, formatted as:
-        - Publication/Website (Date): URL
-        
-        Write in clear, professional language suitable for a business briefing.
-        Focus on facts and concrete information from the sources.
-        Include source URLs directly after each piece of information.
-        
-        IMPORTANT:
-        - Keep the briefing CONCISE (max 2000 words total)
-        - Only output the 5 sections listed above - nothing else
-        - Do NOT add any conversational text like "If you'd like..." or "I can help with..."
-        - Do NOT offer additional services or ask questions
-        - End the briefing after section 5 (KEY SOURCES)
-        - Focus on NEWS - what happened, was announced, changed, or was discovered
-        - Exclude generic resource descriptions or website overviews
-        - Every point must be a concrete, newsworthy item
-        - Themes must be specific to the search topic, not generic categories
-        - AVOID DUPLICATION: Each news item should appear only ONCE in the briefing (choose the most relevant section)
-        - If evidence lacks dates, mark as "(Date not available)" not "(n.d.)"
+        ## FORMAT INSTRUCTIONS
+
+        Use this exact structure with proper spacing between sections:
+
+        ## Executive Summary
+
+        Write 2-3 concise sentences highlighting the most important developments. Use numbered citations [1][2] for sources. Do NOT include raw URLs here.
+
+        ---
+
+        ## Key Developments
+
+        List 3-5 major news items. Format each as:
+
+        **Clear Headline Title**
+        Brief description with specific facts, numbers, dates, and people involved (2-3 sentences). [1][2]
+
+        Add blank line between each development.
+
+        ---
+
+        ## Analysis by Theme
+
+        Create 2-3 thematic sections based on actual news patterns specific to {{topic}} (e.g., "Acquisition Activity", "Regulatory Changes", "Procurement Pipeline", "Technology Developments").
+
+        Format each theme as:
+
+        **Theme: Specific Theme Name**
+        Overview: One sentence summary of this theme's significance.
+
+        - Specific fact or development with concrete data [1]
+        - Another development with numbers/dates/names [2][3]
+        - Additional concrete, newsworthy information [4]
+
+        Add blank line between themes.
+
+        ---
+
+        ## Additional Coverage
+
+        Brief bullets (max 5) for other relevant updates:
+
+        - Specific news item with key detail [1]
+        - Another item with concrete information [2]
+
+        ---
+
+        ## Sources
+
+        List all cited sources in numerical order:
+
+        [1] Publication Name (YYYY-MM-DD): https://full-url.com
+        [2] Another Source (YYYY-MM-DD): https://full-url.com
+        [3] Third Source (YYYY-MM-DD): https://full-url.com
+
+        ---
+
+        ## CRITICAL FORMATTING RULES
+
+        ✓ DO:
+        - Use numbered citations [1][2] inline throughout the briefing
+        - Place ALL URLs only in the Sources section at the end
+        - Add blank lines (---) between major sections for readability
+        - Keep Executive Summary to 2-3 sentences maximum
+        - Focus on NEWS: concrete events, announcements, data, changes
+        - Include specific numbers, dates, names, and facts
+        - Make themes specific to {{topic}}, not generic categories
+        - Ensure each news item appears only ONCE (no duplication)
+        - Use **bold** for headlines and theme names
+        - Number sources consecutively [1], [2], [3]...
+
+        ✗ DON'T:
+        - NEVER include raw URLs like (Date) [https://...] in the body text
+        - Don't write generic website descriptions or overviews
+        - Don't add conversational text like "If you'd like..." or "I can help with..."
+        - Don't duplicate information across sections
+        - Don't exceed 2000 words total
+        - Don't continue past the Sources section
+        - Don't use (n.d.) - use (YYYY-MM-DD) or omit date if unavailable
+
+        ---
+
+        IMPORTANT: The briefing MUST end immediately after the Sources section. Do not add any additional text, offers, or questions.
     save_as: briefing_content
     phase: finalize
 
