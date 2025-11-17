@@ -130,9 +130,13 @@ def markdown_to_html(markdown_text: str) -> str:
     if not markdown_text:
         return ''
 
+    # Pre-process: Convert citation numbers [1], [2] to superscript format
+    # This handles cases where LLM outputs plain [N] instead of markdown links
+    processed_text = re.sub(r'\[(\d+)\]', r'<sup>[\1]</sup>', markdown_text)
+
     # Convert markdown to HTML using markdown2
     html = markdown2.markdown(
-        markdown_text,
+        processed_text,
         extras=['fenced-code-blocks', 'tables', 'strike', 'task_list']
     )
 
@@ -170,6 +174,10 @@ def markdown_to_html(markdown_text: str) -> str:
 
         # Superscripts (for citation numbers)
         (r'<sup>', r'<sup style="color: #667eea; font-weight: 600; font-size: 11px;">'),
+
+        # Horizontal rules (section dividers)
+        (r'<hr>', r'<hr style="border: none; border-top: 2px solid #e2e8f0; margin: 32px 0;">'),
+        (r'<hr />', r'<hr style="border: none; border-top: 2px solid #e2e8f0; margin: 32px 0;" />'),
     ]
 
     for pattern, replacement in style_mappings:
@@ -395,21 +403,30 @@ def render_alert_banner(banner_config: Optional[dict]) -> str:
 
 
 # =============================================================================
+# LOGO CONFIGURATION
+# =============================================================================
+
+# Logo URL - hosted version of the research agent logo
+# Can be updated to point to your own hosted logo
+LOGO_URL = "https://webresearchagent.replit.app/static/logo.png"
+
+
+# =============================================================================
 # COMPLETE EMAIL TEMPLATE WRAPPER
 # =============================================================================
 
-def create_email_html(title: str, subtitle: str, content_html: str) -> str:
+def create_email_html(research_topic: str, date_str: str, content_html: str) -> str:
     """Wrap content in a complete, professional email template.
 
     This creates a full HTML email with:
     - Email-safe structure (MSO tables, Outlook compatibility)
-    - Gradient header with title/subtitle
+    - Compact header with logo (left) + topic & date (right)
     - Professional footer with branding
     - Responsive design for mobile
 
     Args:
-        title: Email title (shown in header)
-        subtitle: Subtitle text (shown below title)
+        research_topic: The research topic (shown in header)
+        date_str: Date string (shown below topic)
         content_html: Main content HTML
 
     Returns:
@@ -420,23 +437,20 @@ def create_email_html(title: str, subtitle: str, content_html: str) -> str:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title}</title>
+    <title>{research_topic}</title>
     <style>
         body, table, td, a {{ -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
         table, td {{ mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
         img {{ -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }}
         body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f5f7; color: #2d3748; }}
         .email-container {{ max-width: 680px; margin: 0 auto; background-color: #ffffff; }}
-        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 48px 40px; text-align: center; }}
-        .header h1 {{ margin: 0 0 8px 0; color: #ffffff; font-size: 32px; font-weight: 700; line-height: 1.2; }}
-        .header .subtitle {{ margin: 0; color: rgba(255, 255, 255, 0.95); font-size: 16px; font-weight: 400; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px 32px; }}
         .content {{ padding: 40px 40px 48px 40px; }}
         .footer {{ background: #2d3748; color: #cbd5e0; padding: 32px 40px; text-align: center; }}
         .footer p {{ margin: 6px 0; font-size: 14px; }}
         .footer-brand {{ font-weight: 600; color: #ffffff; font-size: 16px; }}
         @media only screen and (max-width: 600px) {{
-            .header {{ padding: 32px 24px !important; }}
-            .header h1 {{ font-size: 26px !important; }}
+            .header {{ padding: 20px !important; }}
             .content {{ padding: 24px !important; }}
             .footer {{ padding: 24px !important; }}
         }}
@@ -453,9 +467,18 @@ def create_email_html(title: str, subtitle: str, content_html: str) -> str:
             <td align="center" style="padding: 24px 0;">
                 <table role="presentation" class="email-container" cellspacing="0" cellpadding="0" border="0" style="max-width: 680px; margin: 0 auto; background-color: #ffffff;">
                     <tr>
-                        <td class="header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 48px 40px; text-align: center;">
-                            <h1 style="margin: 0 0 8px 0; color: #ffffff; font-size: 32px; font-weight: 700; line-height: 1.2;">{title}</h1>
-                            {f'<p class="subtitle" style="margin: 0; color: rgba(255, 255, 255, 0.95); font-size: 16px; font-weight: 400;">{subtitle}</p>' if subtitle else ''}
+                        <td class="header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px 32px;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td width="60" valign="middle" style="padding-right: 16px;">
+                                        <img src="{LOGO_URL}" alt="Research Agent" width="48" height="48" style="display: block; width: 48px; height: 48px; border-radius: 8px; background: rgba(255,255,255,0.95);">
+                                    </td>
+                                    <td valign="middle">
+                                        <div style="color: #ffffff; font-size: 18px; font-weight: 600; line-height: 1.3; margin: 0;">{research_topic}</div>
+                                        <div style="color: rgba(255, 255, 255, 0.85); font-size: 14px; font-weight: 400; margin-top: 4px;">{date_str}</div>
+                                    </td>
+                                </tr>
+                            </table>
                         </td>
                     </tr>
                     <tr>
@@ -514,19 +537,6 @@ def render_complete_email(
     if not current_date:
         current_date = datetime.utcnow().strftime('%A, %B %d, %Y')
 
-    # Generate title and subtitle from template
-    current_time = datetime.utcnow().strftime('%I:%M %p UTC')
-    title = template_config['title_template'].format(
-        topic=research_topic,
-        date=current_date,
-        time=current_time
-    )
-    subtitle = template_config['subtitle_template'].format(
-        topic=research_topic,
-        date=current_date,
-        time=current_time
-    )
-
     # Build content HTML
     content_parts = []
 
@@ -555,8 +565,9 @@ def render_complete_email(
     # Combine all content
     content_html = '\n'.join(content_parts)
 
-    # Wrap in complete email template
-    return create_email_html(title, subtitle, content_html)
+    # Wrap in complete email template with simplified header
+    # Header now shows: Logo (left) + Research Topic + Date
+    return create_email_html(research_topic, current_date, content_html)
 
 
 def generate_strategy_subject_line(

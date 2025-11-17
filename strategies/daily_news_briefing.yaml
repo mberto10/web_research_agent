@@ -55,89 +55,104 @@ tool_chain:
 
         ---
 
-        ## FORMAT INSTRUCTIONS
+        # OUTPUT FORMAT (FOLLOW EXACTLY)
 
-        Use this exact structure with proper spacing between sections:
-
-        ## Executive Summary
-
-        Write 2-3 concise sentences highlighting the most important developments. Use numbered citations [1][2] for sources. Do NOT include raw URLs here.
+        You MUST produce output in this EXACT format. Use superscript citation numbers [1], [2], etc. NO URLs anywhere except the Sources section.
 
         ---
 
-        ## Key Developments
+        ## EXECUTIVE SUMMARY
 
-        List 3-5 major news items. Format each as:
+        2-3 sentences summarizing key developments. Citations as superscript numbers only.
 
-        **Clear Headline Title**
-        Brief description with specific facts, numbers, dates, and people involved (2-3 sentences). [1][2]
+        **GOOD EXAMPLE:**
+        "Germany received U.S. clearance for SM-6/SM-2 missile sales (~$3.2B) for new F127 frigates.[1] The U.S. Air Force conducted B61-12 inert bomb loading tests on F-35 aircraft.[2] Congressional NDAA work continues with elevated oversight scrutiny.[3]"
 
-        Add blank line between each development.
-
-        ---
-
-        ## Analysis by Theme
-
-        Create 2-3 thematic sections based on actual news patterns specific to {{topic}} (e.g., "Acquisition Activity", "Regulatory Changes", "Procurement Pipeline", "Technology Developments").
-
-        Format each theme as:
-
-        **Theme: Specific Theme Name**
-        Overview: One sentence summary of this theme's significance.
-
-        - Specific fact or development with concrete data [1]
-        - Another development with numbers/dates/names [2][3]
-        - Additional concrete, newsworthy information [4]
-
-        Add blank line between themes.
+        **BAD EXAMPLE (DO NOT DO THIS):**
+        "Germany received clearance (reported Nov 17) amid continued European investments. Sources: Breaking Defense https://breakingdefense.com/tag/germany/; Air & Space Forces https://www.airandspaceforces.com..."
 
         ---
 
-        ## Additional Coverage
+        ## KEY DEVELOPMENTS
 
-        Brief bullets (max 5) for other relevant updates:
+        ### Clear Headline Here
 
-        - Specific news item with key detail [1]
-        - Another item with concrete information [2]
+        2-3 sentences with specific facts, numbers, names. End with citation numbers.[1][2]
+
+        ### Another Headline
+
+        More specific content with data points.[3]
+
+        **GOOD EXAMPLE:**
+        "### U.S. Clears Missile Sales for Germany's F127 Frigates
+
+        The U.S. government notified Congress of a potential $3.2 billion Foreign Military Sale to equip Germany's new F127-class frigates with SM-6 and SM-2 missiles.[1]"
+
+        **BAD EXAMPLE:**
+        "• U.S. clears SM 6/SM 2 missile sales: U.S. government notified Congress... Source: (Nov 17, 2025) https://breakingdefense.com/tag/germany/"
 
         ---
 
-        ## Sources
+        ## ANALYSIS BY THEME
 
-        List all cited sources in numerical order:
+        ### Theme Name (e.g., Space & ISR Activity)
+
+        One sentence overview of this theme's significance.
+
+        - **Bold item title** — Specific details with numbers or dates.[1]
+        - **Another item** — More concrete information.[2][3]
+
+        **GOOD EXAMPLE:**
+        "### Space & ISR Activity
+
+        Renewed procurement and launch activity highlights dual civilian/military capabilities.
+
+        - **U.S. Space Force C2 FMS** — Market research announced for potential sale to Canada.[4]
+        - **Sentinel-6B Launch** — Successfully launched from Vandenberg at 06:21 CET.[5]"
+
+        **BAD EXAMPLE:**
+        "Theme: Space/exports — export and foreign military sales activity...
+        • U.S. Space Force conducting market research (Nov 17) [https://aviationweek.com/...]"
+
+        ---
+
+        ## NOTABLE MENTIONS
+
+        - Brief item with key detail.[1]
+        - Another item.[2]
+
+        ---
+
+        ## SOURCES
 
         [1] Publication Name (YYYY-MM-DD): https://full-url.com
         [2] Another Source (YYYY-MM-DD): https://full-url.com
-        [3] Third Source (YYYY-MM-DD): https://full-url.com
 
         ---
 
-        ## CRITICAL FORMATTING RULES
+        # ABSOLUTE RULES
 
-        ✓ DO:
-        - Use numbered citations [1][2] inline throughout the briefing
-        - Place ALL URLs only in the Sources section at the end
-        - Add blank lines (---) between major sections for readability
-        - Keep Executive Summary to 2-3 sentences maximum
-        - Focus on NEWS: concrete events, announcements, data, changes
-        - Include specific numbers, dates, names, and facts
-        - Make themes specific to {{topic}}, not generic categories
-        - Ensure each news item appears only ONCE (no duplication)
-        - Use **bold** for headlines and theme names
-        - Number sources consecutively [1], [2], [3]...
+        ✅ REQUIRED:
+        - Use ONLY superscript citation numbers [1], [2], [3] in body text
+        - ALL URLs go ONLY in the Sources section at the end
+        - Use ### for each Key Development headline
+        - Use ### for each Theme name in Analysis section
+        - Use **bold** for bullet point titles
+        - Add --- horizontal rules between major sections
+        - Keep Executive Summary to 2-3 sentences MAX
+        - Number sources consecutively starting from [1]
 
-        ✗ DON'T:
-        - NEVER include raw URLs like (Date) [https://...] in the body text
-        - Don't write generic website descriptions or overviews
-        - Don't add conversational text like "If you'd like..." or "I can help with..."
-        - Don't duplicate information across sections
-        - Don't exceed 2000 words total
-        - Don't continue past the Sources section
-        - Don't use (n.d.) - use (YYYY-MM-DD) or omit date if unavailable
+        ❌ FORBIDDEN:
+        - NO raw URLs in body text (e.g., https://example.com)
+        - NO inline URL patterns like "Source: (Date) https://..."
+        - NO parenthetical URLs like "[text](url)" in prose
+        - NO "Key sources:" lists in body sections
+        - NO conversational text ("If you'd like...", "I can help...")
+        - NO text after the Sources section
 
         ---
 
-        IMPORTANT: The briefing MUST end immediately after the Sources section. Do not add any additional text, offers, or questions.
+        CRITICAL: End IMMEDIATELY after the Sources section. No additional text.
     save_as: briefing_content
     phase: finalize
 

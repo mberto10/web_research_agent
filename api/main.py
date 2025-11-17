@@ -1,5 +1,6 @@
 """Research Agent API - Subscription management + batch execution."""
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends, Header
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from datetime import datetime
@@ -10,6 +11,7 @@ import logging
 import sys
 import secrets
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from api.database import get_db, db_manager
 from api import schemas, crud
@@ -115,6 +117,15 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# --- Static Files ---
+# Mount static directory for serving logo and other assets
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    logger.info(f"📁 Static files mounted from {static_dir}")
+else:
+    logger.warning(f"⚠️ Static directory not found: {static_dir}")
 
 # --- Authentication ---
 
