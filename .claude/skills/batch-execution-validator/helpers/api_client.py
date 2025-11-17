@@ -45,7 +45,7 @@ def trigger_batch_execution(
     api_url: str,
     api_key: str,
     frequency: str,
-    callback_url: str = "https://webhook.site/test"
+    callback_url: str = "https://defaulte29fc699127e425da75fed341dc328.38.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/05a44fcda78f472d9943dc52d3e66641/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2l-aB7LtZ7hDnyqUdZg4lccHzr0H_favXxG-VZqSmd8"
 ) -> Dict[str, Any]:
     """
     Trigger batch execution for specified frequency.
@@ -54,7 +54,7 @@ def trigger_batch_execution(
         api_url: Base API URL
         api_key: API authentication key
         frequency: Frequency to execute (daily, weekly, monthly)
-        callback_url: Webhook callback URL (default: test webhook)
+        callback_url: Webhook callback URL (default: Power Automate webhook)
 
     Returns:
         Response data with execution metadata
@@ -197,8 +197,8 @@ Examples:
 
     parser.add_argument(
         '--callback-url',
-        default='https://webhook.site/test',
-        help='Webhook callback URL (default: https://webhook.site/test)'
+        default='https://defaulte29fc699127e425da75fed341dc328.38.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/05a44fcda78f472d9943dc52d3e66641/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2l-aB7LtZ7hDnyqUdZg4lccHzr0H_favXxG-VZqSmd8',
+        help='Webhook callback URL (default: Power Automate webhook)'
     )
 
     parser.add_argument(

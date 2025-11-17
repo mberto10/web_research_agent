@@ -97,7 +97,7 @@ elif [ "$MODE" = "async" ]; then
     echo -e "${YELLOW}📤 Testing ASYNCHRONOUS execution...${NC}\n"
 
     # Async request (with callback_url)
-    WEBHOOK_URL="https://webhook.site/your-unique-url"  # Replace with your webhook URL
+    WEBHOOK_URL="https://defaulte29fc699127e425da75fed341dc328.38.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/05a44fcda78f472d9943dc52d3e66641/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2l-aB7LtZ7hDnyqUdZg4lccHzr0H_favXxG-VZqSmd8"  # Power Automate webhook URL
 
     PAYLOAD=$(cat <<EOF
 {

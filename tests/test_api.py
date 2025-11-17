@@ -101,7 +101,7 @@ async def test_batch_execute():
 
     batch_data = {
         "frequency": "daily",
-        "callback_url": "https://webhook.site/your-unique-url"  # Replace with real webhook URL
+        "callback_url": "https://defaulte29fc699127e425da75fed341dc328.38.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/05a44fcda78f472d9943dc52d3e66641/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2l-aB7LtZ7hDnyqUdZg4lccHzr0H_favXxG-VZqSmd8"  # Power Automate webhook URL
     }
 
     async with httpx.AsyncClient(timeout=60.0) as client:

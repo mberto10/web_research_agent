@@ -14,6 +14,11 @@ from contextlib import asynccontextmanager
 from api.database import get_db, db_manager
 from api import schemas, crud
 from api.webhooks import send_webhook
+from api.email_templates import (
+    render_complete_email,
+    generate_strategy_subject_line,
+    extract_and_number_citations as template_extract_citations
+)
 from core.config import load_config_from_db, clear_config_cache
 from strategies import load_strategies_from_db
 from api.models import GlobalSetting
@@ -950,23 +955,42 @@ async def run_batch_research(tasks: list, callback_url: str):
 
             # Extract current date from vars for subject line
             current_date = vars_dict.get("current_date", "")
+            executed_at = datetime.utcnow().isoformat()
 
-            # Generate HTML content body
-            html_body = combine_content_html(sections, citations)
+            # Extract and number citations
+            modified_sections, citations_registry = template_extract_citations(sections, evidence)
 
-            # Format payload with new structure
+            # Generate complete HTML email with strategy-specific template
+            complete_html = render_complete_email(
+                research_topic=task.research_topic,
+                sections=modified_sections,
+                citations=citations_registry,
+                strategy_slug=strategy_slug,
+                evidence_count=len(evidence),
+                executed_at=executed_at,
+                current_date=current_date
+            )
+
+            # Generate strategy-aware subject line
+            subject_line = generate_strategy_subject_line(
+                task.research_topic,
+                strategy_slug,
+                current_date
+            )
+
+            # Format payload with complete HTML email
             payload = {
                 "task_id": str(task.id),
                 "email": task.email,
                 "research_topic": task.research_topic,
                 "frequency": task.frequency,
                 "status": "completed",
-                "subject": generate_subject_line(task.research_topic, current_date),
-                "body": html_body,
+                "subject": subject_line,
+                "body": complete_html,
                 "isHtml": True,
                 "metadata": {
                     "evidence_count": len(evidence),
-                    "executed_at": datetime.utcnow().isoformat(),
+                    "executed_at": executed_at,
                     "strategy_slug": strategy_slug,
                     "current_date": current_date
                 }
@@ -1129,23 +1153,42 @@ async def run_manual_research(research_topic: str, callback_url: str, email: str
 
         # Extract current date from vars for subject line
         current_date = vars_dict.get("current_date", "")
+        executed_at = datetime.utcnow().isoformat()
 
-        # Generate HTML content body
-        html_body = combine_content_html(sections, citations)
+        # Extract and number citations
+        modified_sections, citations_registry = template_extract_citations(sections, evidence)
 
-        # Format payload with new structure
+        # Generate complete HTML email with strategy-specific template
+        complete_html = render_complete_email(
+            research_topic=research_topic,
+            sections=modified_sections,
+            citations=citations_registry,
+            strategy_slug=strategy_slug,
+            evidence_count=len(evidence),
+            executed_at=executed_at,
+            current_date=current_date
+        )
+
+        # Generate strategy-aware subject line
+        subject_line = generate_strategy_subject_line(
+            research_topic,
+            strategy_slug,
+            current_date
+        )
+
+        # Format payload with complete HTML email
         payload = {
             "task_id": f"manual-{uuid4()}",  # Generate pseudo task ID for consistency
             "email": email or "manual_user",
             "research_topic": research_topic,
             "frequency": "manual",
             "status": "completed",
-            "subject": generate_subject_line(research_topic, current_date),
-            "body": html_body,
+            "subject": subject_line,
+            "body": complete_html,
             "isHtml": True,
             "metadata": {
                 "evidence_count": len(evidence),
-                "executed_at": datetime.utcnow().isoformat(),
+                "executed_at": executed_at,
                 "strategy_slug": strategy_slug,
                 "current_date": current_date
             }
