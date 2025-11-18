@@ -61,7 +61,6 @@ tool_chain:
 
         Thema: {{topic}}
         Aktuelles Datum: {{current_date}}
-        Evidenz-Sets: Parallel ({{parallel_results|length}} Einträge), Sonar ({{sonar_results|length}} Einträge), Gap Fill ({{sonar_gap_results|length}} Einträge)
 
         Forschungsevidenz:
         {{evidence_text}}
@@ -71,35 +70,33 @@ tool_chain:
         Halte dich exakt an diese Struktur:
 
         ## EXECUTIVE SUMMARY
-        2-3 Sätze zu den wichtigsten Entwicklungen, mit hochgestellten Zitaten.
+        2-3 Sätze zu den wichtigsten Entwicklungen. Verweise auf Quellen mit [Kurzbezeichnung](URL) im Text.
 
         ## BREAKING NEWS
-        - Aufzählung von Entwicklungen <6h mit Zeitstempel. Quellen angeben.
+        - Aufzählung von Entwicklungen <6h mit Zeitstempel. Quellen als [Text](URL) verlinken.
 
         ## KEY DEVELOPMENTS
         ### Überschrift
-        2-3 Sätze mit konkreten Fakten, Abschluss mit Zitaten.[1][2]
+        2-3 Sätze mit konkreten Fakten. Quellen als [Kurzname](URL) verlinken.
 
         (Erstelle 3-5 solcher Abschnitte.)
 
         ## ANALYSIS BY THEME
         ### Themenname
-        Ein Satz Fazit plus 2-3 Bulletpoints, die Erkenntnisse über Quellen verbinden.
+        Ein Satz Fazit plus 2-3 Bulletpoints. Quellen als [Text](URL) verlinken.
 
         ## MARKET IMPACT (weglassen, falls nicht relevant)
-        Kurzer Absatz zu Auswirkungen für Investoren/Stakeholder.
+        Kurzer Absatz zu Auswirkungen für Investoren/Stakeholder. Quellen als [Text](URL) verlinken.
 
         ## NOTABLE MENTIONS
-        - Weitere prägnante Updates.
-
-        ## SOURCES
-        [1] Publikation (YYYY-MM-DD): https://voll-url.com
-        ...
+        - Weitere prägnante Updates als Bulletpoints. Quellen als [Text](URL) verlinken.
 
         Regeln:
-        - Verwende hochgestellte Zitatnummern im Fließtext; URLs nur im Quellenabschnitt.
-        - Trenne jede Sektion mit ---.
-        - Beende den Text direkt nach dem Quellenabschnitt.
+        - Verlinke alle Quellenverweise im Markdown-Format: [Beschreibender Text](vollständige-URL)
+        - Verwende ### für Unterpunkte unter ## Hauptsektionen (korrekte Überschriftenhierarchie beachten)
+        - Keine horizontalen Trennlinien zwischen Sektionen einfügen
+        - KEINE separate "## SOURCES" Sektion erstellen - alle Quellen sind inline verlinkt
+        - Beende den Text direkt nach "## NOTABLE MENTIONS"
     save_as: briefing_content
     phase: finalize
 

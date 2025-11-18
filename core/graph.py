@@ -976,6 +976,22 @@ def fill(state: State) -> State:
     state.vars["runtime_plan"] = runtime_plan
     logger.info(f"✅ FILL: Created runtime plan with {len(runtime_plan)} steps")
 
+    # Pre-render strategy.queries to resolve nested templates
+    # This fixes parallel search adapter receiving unresolved {{topic}}, {{current_date}}, etc.
+    if strategy.queries:
+        from core.utils import render_template_string
+        logger.info(f"🔄 FILL: Pre-rendering {len(strategy.queries)} strategy queries")
+        for key, template_value in strategy.queries.items():
+            try:
+                # Render template with all current variables (topic, dates, etc.)
+                rendered_value = render_template_string(template_value, state.vars)
+                state.vars[key] = rendered_value
+                logger.debug(f"  ✓ Rendered {key}: {template_value[:50]}... -> {rendered_value[:50]}...")
+            except Exception as e:
+                logger.warning(f"  ⚠️ Failed to render query '{key}': {e}")
+                # Keep original template value if rendering fails
+                state.vars[key] = template_value
+
     # Capture output
     if lf_client:
         try:
@@ -1456,6 +1472,20 @@ def _parse_sections_from_content(state: State, content: str) -> None:
         if len(unique_sections) != len(state.sections):
             logger.info(f"📝 FINALIZE: Deduplication: {len(state.sections)} → {len(unique_sections)} sections")
             state.sections = unique_sections
+
+    # FILTER: Remove any LLM-generated "## SOURCES" section to prevent duplicates
+    # Post-processing will add a proper "Quellensammlung" section
+    filtered_sections = []
+    for section in state.sections:
+        # Check if section starts with "## SOURCES" or "## Sources" (case-insensitive)
+        section_start = section.strip()[:20].upper()
+        if section_start.startswith("## SOURCES") or section_start.startswith("##SOURCES"):
+            logger.info(f"🗑️ FINALIZE: Filtered out LLM-generated ## SOURCES section to prevent duplicate")
+            continue
+        filtered_sections.append(section)
+
+    if len(filtered_sections) != len(state.sections):
+        state.sections = filtered_sections
 
     # DEBUG: Log parsed sections
     logger.info(f"📝 FINALIZE: Parsed into {len(state.sections)} sections:")
