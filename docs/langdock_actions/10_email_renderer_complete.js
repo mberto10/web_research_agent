@@ -63,7 +63,7 @@ const markdownToHtml = (markdown) => {
 // ============================================================================
 
 const createEmailHTML = (title, subtitle, contentHTML) => {
-    return `
+    return `</p>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,9 +76,6 @@ const createEmailHTML = (title, subtitle, contentHTML) => {
         img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
         body { margin: 0 !important; padding: 0 !important; width: 100% !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f5f7; color: #2d3748; }
         .email-container { max-width: 680px; margin: 0 auto; background-color: #ffffff; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 48px 40px; text-align: center; }
-        .header h1 { margin: 0 0 8px 0; color: #ffffff; font-size: 32px; font-weight: 700; line-height: 1.2; }
-        .header .subtitle { margin: 0; color: rgba(255, 255, 255, 0.95); font-size: 16px; font-weight: 400; }
         .content { padding: 40px 40px 48px 40px; }
         .content h1 { color: #1a202c; font-size: 28px; font-weight: 700; margin: 32px 0 16px 0; padding-bottom: 12px; border-bottom: 3px solid #667eea; }
         .content h2 { color: #2d3748; font-size: 22px; font-weight: 600; margin: 28px 0 14px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; }
@@ -99,10 +96,7 @@ const createEmailHTML = (title, subtitle, contentHTML) => {
         .footer { background: #2d3748; color: #cbd5e0; padding: 32px 40px; text-align: center; }
         .footer p { margin: 6px 0; font-size: 14px; }
         .footer-brand { font-weight: 600; color: #ffffff; font-size: 16px; }
-        .metadata-badge { background: #edf2f7; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin: 24px 0; font-size: 13px; color: #718096; }
         @media only screen and (max-width: 600px) {
-            .header { padding: 32px 24px !important; }
-            .header h1 { font-size: 26px !important; }
             .content { padding: 24px !important; }
             .content h1 { font-size: 24px !important; }
             .content h2 { font-size: 20px !important; }
@@ -115,12 +109,6 @@ const createEmailHTML = (title, subtitle, contentHTML) => {
         <tr>
             <td align="center" style="padding: 24px 0;">
                 <table role="presentation" class="email-container" cellspacing="0" cellpadding="0" border="0">
-                    <tr>
-                        <td class="header">
-                            <h1>${title}</h1>
-                            ${subtitle ? `<p class="subtitle">${subtitle}</p>` : ''}
-                        </td>
-                    </tr>
                     <tr>
                         <td class="content">
                             ${contentHTML}
@@ -137,7 +125,8 @@ const createEmailHTML = (title, subtitle, contentHTML) => {
         </tr>
     </table>
 </body>
-</html>`.trim();
+</html>
+<p>`.trim();
 };
 
 // ============================================================================
@@ -174,7 +163,6 @@ const renderCitations = (citations) => {
 // ============================================================================
 
 const renderMetadata = (metadata, research_topic) => {
-    const evidence_count = metadata?.evidence_count || 0;
     const executed_at = metadata?.executed_at || new Date().toISOString();
     const strategy_slug = metadata?.strategy_slug || 'unknown';
 
@@ -188,11 +176,26 @@ const renderMetadata = (metadata, research_topic) => {
     });
 
     return `
-        <div class="metadata-badge">
-            <strong>Research Topic:</strong> ${research_topic}<br>
-            <strong>Strategy:</strong> ${strategy_slug}<br>
-            <strong>Sources Analyzed:</strong> ${evidence_count}<br>
-            <strong>Generated:</strong> ${date}
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; padding: 24px 28px; margin: 0 0 32px 0; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);">
+            <div style="color: #ffffff; font-size: 22px; font-weight: 700; line-height: 1.3; margin: 0 0 12px 0;">${research_topic}</div>
+            <div style="color: rgba(255, 255, 255, 0.9); font-size: 14px; line-height: 1.6;">
+                <strong style="color: rgba(255, 255, 255, 0.95);">Strategy:</strong> ${strategy_slug}<br>
+                <strong style="color: rgba(255, 255, 255, 0.95);">Generated:</strong> ${date}
+            </div>
+        </div>
+    `;
+};
+
+// ============================================================================
+// DISCLAIMER BANNER
+// ============================================================================
+
+const renderDisclaimerBanner = () => {
+    return `
+        <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-left: 3px solid #6c757d; padding: 14px 18px; margin-bottom: 28px; border-radius: 4px;">
+            <p style="margin: 0; color: #495057; font-size: 14px; line-height: 1.6;">
+                <strong style="color: #343a40;">ℹ️ Hinweis:</strong> Dieses Briefing wurde von einem KI-Agenten in Eigenrecherche erstellt und kann Ungenauigkeiten oder Fehler enthalten. Bitte prüfen Sie wenn notwendig alle Quellen sorgfältig und kontaktieren Sie das GenAI Team bei auftretenden Fehlern.
+            </p>
         </div>
     `;
 };
@@ -208,11 +211,17 @@ const renderDefault = (payload, alertBanner = null) => {
     const sectionsHTML = sections.map(section => markdownToHtml(section)).join('\n');
 
     let contentHTML = '';
+    // 1. Metadata header
+    contentHTML += renderMetadata(metadata, research_topic);
+    // 2. Standard disclaimer banner (always shown)
+    contentHTML += renderDisclaimerBanner();
+    // 3. Strategy-specific alert banner (optional)
     if (alertBanner) {
         contentHTML += alertBanner;
     }
-    contentHTML += renderMetadata(metadata, research_topic);
+    // 4. Main content
     contentHTML += sectionsHTML;
+    // 5. Citations
     contentHTML += renderCitations(citations);
 
     return contentHTML;

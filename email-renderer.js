@@ -55,7 +55,7 @@ const markdownToHtml = (markdown) => {
 // ============================================================================
 
 const createEmailHTML = (title, subtitle, contentHTML, footerText = null) => {
-    return `
+    return `</p>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -90,28 +90,6 @@ const createEmailHTML = (title, subtitle, contentHTML, footerText = null) => {
             max-width: 680px;
             margin: 0 auto;
             background-color: #ffffff;
-        }
-
-        /* Header styles */
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 48px 40px;
-            text-align: center;
-        }
-
-        .header h1 {
-            margin: 0 0 8px 0;
-            color: #ffffff;
-            font-size: 32px;
-            font-weight: 700;
-            line-height: 1.2;
-        }
-
-        .header .subtitle {
-            margin: 0;
-            color: rgba(255, 255, 255, 0.95);
-            font-size: 16px;
-            font-weight: 400;
         }
 
         /* Content area */
@@ -261,14 +239,6 @@ const createEmailHTML = (title, subtitle, contentHTML, footerText = null) => {
 
         /* Responsive */
         @media only screen and (max-width: 600px) {
-            .header {
-                padding: 32px 24px !important;
-            }
-
-            .header h1 {
-                font-size: 26px !important;
-            }
-
             .content {
                 padding: 24px !important;
             }
@@ -292,15 +262,7 @@ const createEmailHTML = (title, subtitle, contentHTML, footerText = null) => {
         <tr>
             <td align="center" style="padding: 24px 0;">
                 <table role="presentation" class="email-container" cellspacing="0" cellpadding="0" border="0">
-                    <!-- Header -->
-                    <tr>
-                        <td class="header">
-                            <h1>${title}</h1>
-                            ${subtitle ? `<p class="subtitle">${subtitle}</p>` : ''}
-                        </td>
-                    </tr>
-
-                    <!-- Content -->
+                    <!-- Content (metadata card serves as header) -->
                     <tr>
                         <td class="content">
                             ${contentHTML}
@@ -321,6 +283,7 @@ const createEmailHTML = (title, subtitle, contentHTML, footerText = null) => {
     </table>
 </body>
 </html>
+<p>
     `.trim();
 };
 
@@ -360,7 +323,6 @@ const renderCitations = (citations) => {
 // ============================================================================
 
 const renderMetadata = (metadata, research_topic) => {
-    const evidence_count = metadata?.evidence_count || 0;
     const executed_at = metadata?.executed_at || new Date().toISOString();
     const strategy_slug = metadata?.strategy_slug || 'unknown';
 
@@ -374,11 +336,26 @@ const renderMetadata = (metadata, research_topic) => {
     });
 
     return `
-        <div class="metadata-badge">
-            <strong>Research Topic:</strong> ${research_topic}<br>
-            <strong>Strategy:</strong> ${strategy_slug}<br>
-            <strong>Sources Analyzed:</strong> ${evidence_count}<br>
-            <strong>Generated:</strong> ${date}
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; padding: 24px 28px; margin: 0 0 32px 0; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);">
+            <div style="color: #ffffff; font-size: 22px; font-weight: 700; line-height: 1.3; margin: 0 0 12px 0;">${research_topic}</div>
+            <div style="color: rgba(255, 255, 255, 0.9); font-size: 14px; line-height: 1.6;">
+                <strong style="color: rgba(255, 255, 255, 0.95);">Strategy:</strong> ${strategy_slug}<br>
+                <strong style="color: rgba(255, 255, 255, 0.95);">Generated:</strong> ${date}
+            </div>
+        </div>
+    `;
+};
+
+// ============================================================================
+// DISCLAIMER BANNER
+// ============================================================================
+
+const renderDisclaimerBanner = () => {
+    return `
+        <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-left: 3px solid #6c757d; padding: 14px 18px; margin-bottom: 28px; border-radius: 4px;">
+            <p style="margin: 0; color: #495057; font-size: 14px; line-height: 1.6;">
+                <strong style="color: #343a40;">ℹ️ Hinweis:</strong> Dieses Briefing wurde von einem KI-Agenten in Eigenrecherche erstellt und kann Ungenauigkeiten oder Fehler enthalten. Bitte prüfen Sie wenn notwendig alle Quellen sorgfältig und kontaktieren Sie das GenAI Team bei auftretenden Fehlern.
+            </p>
         </div>
     `;
 };
@@ -400,6 +377,7 @@ const renderDailyNewsBriefing = (payload) => {
 
     // Build content
     let contentHTML = renderMetadata(metadata, research_topic);
+    contentHTML += renderDisclaimerBanner();
     contentHTML += sectionsHTML;
     contentHTML += renderCitations(citations);
 
@@ -424,13 +402,13 @@ const renderRealTimeNewsBriefing = (payload) => {
 
     const sectionsHTML = sections.map(section => markdownToHtml(section)).join('\n');
 
-    let contentHTML = `
+    let contentHTML = renderMetadata(metadata, research_topic);
+    contentHTML += renderDisclaimerBanner();
+    contentHTML += `
         <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin-bottom: 24px; border-radius: 4px;">
             <strong style="color: #78350f;">⚡ BREAKING NEWS ALERT</strong>
         </div>
     `;
-
-    contentHTML += renderMetadata(metadata, research_topic);
     contentHTML += sectionsHTML;
     contentHTML += renderCitations(citations);
 
@@ -451,6 +429,7 @@ const renderWeekOverview = (payload) => {
     const sectionsHTML = sections.map(section => markdownToHtml(section)).join('\n');
 
     let contentHTML = renderMetadata(metadata, research_topic);
+    contentHTML += renderDisclaimerBanner();
     contentHTML += sectionsHTML;
     contentHTML += renderCitations(citations);
 
@@ -470,13 +449,13 @@ const renderCompanyDossier = (payload) => {
 
     const sectionsHTML = sections.map(section => markdownToHtml(section)).join('\n');
 
-    let contentHTML = `
+    let contentHTML = renderMetadata(metadata, research_topic);
+    contentHTML += renderDisclaimerBanner();
+    contentHTML += `
         <div style="background: #e0e7ff; border-left: 4px solid #667eea; padding: 16px; margin-bottom: 24px; border-radius: 4px;">
             <strong style="color: #3730a3;">🏢 Company Research Report</strong>
         </div>
     `;
-
-    contentHTML += renderMetadata(metadata, research_topic);
     contentHTML += sectionsHTML;
     contentHTML += renderCitations(citations);
 
@@ -496,13 +475,13 @@ const renderFinancialResearch = (payload) => {
 
     const sectionsHTML = sections.map(section => markdownToHtml(section)).join('\n');
 
-    let contentHTML = `
+    let contentHTML = renderMetadata(metadata, research_topic);
+    contentHTML += renderDisclaimerBanner();
+    contentHTML += `
         <div style="background: #dcfce7; border-left: 4px solid #16a34a; padding: 16px; margin-bottom: 24px; border-radius: 4px;">
             <strong style="color: #14532d;">📈 Financial Market Analysis</strong>
         </div>
     `;
-
-    contentHTML += renderMetadata(metadata, research_topic);
     contentHTML += sectionsHTML;
     contentHTML += renderCitations(citations);
 
@@ -522,13 +501,13 @@ const renderFinancialNewsReactive = (payload) => {
 
     const sectionsHTML = sections.map(section => markdownToHtml(section)).join('\n');
 
-    let contentHTML = `
+    let contentHTML = renderMetadata(metadata, research_topic);
+    contentHTML += renderDisclaimerBanner();
+    contentHTML += `
         <div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 16px; margin-bottom: 24px; border-radius: 4px;">
             <strong style="color: #7f1d1d;">📊 Market Alert</strong>
         </div>
     `;
-
-    contentHTML += renderMetadata(metadata, research_topic);
     contentHTML += sectionsHTML;
     contentHTML += renderCitations(citations);
 
@@ -549,6 +528,7 @@ const renderNewsMonitoring = (payload) => {
     const sectionsHTML = sections.map(section => markdownToHtml(section)).join('\n');
 
     let contentHTML = renderMetadata(metadata, research_topic);
+    contentHTML += renderDisclaimerBanner();
     contentHTML += sectionsHTML;
     contentHTML += renderCitations(citations);
 
@@ -568,13 +548,13 @@ const renderResearchPaperAnalysis = (payload) => {
 
     const sectionsHTML = sections.map(section => markdownToHtml(section)).join('\n');
 
-    let contentHTML = `
+    let contentHTML = renderMetadata(metadata, research_topic);
+    contentHTML += renderDisclaimerBanner();
+    contentHTML += `
         <div style="background: #f3e8ff; border-left: 4px solid #9333ea; padding: 16px; margin-bottom: 24px; border-radius: 4px;">
             <strong style="color: #581c87;">🎓 Academic Research Analysis</strong>
         </div>
     `;
-
-    contentHTML += renderMetadata(metadata, research_topic);
     contentHTML += sectionsHTML;
     contentHTML += renderCitations(citations);
 

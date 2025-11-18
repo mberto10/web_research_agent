@@ -351,16 +351,16 @@ def render_metadata_badge(
     evidence_count: int,
     executed_at: str
 ) -> str:
-    """Render metadata information as a styled badge.
+    """Render metadata information as a styled header card.
 
     Args:
         research_topic: The research topic
         strategy_slug: Strategy identifier
-        evidence_count: Number of sources analyzed
+        evidence_count: Number of sources analyzed (not displayed)
         executed_at: ISO timestamp of execution
 
     Returns:
-        HTML string with metadata badge
+        HTML string with metadata header card
     """
     # Format the execution time
     try:
@@ -370,18 +370,34 @@ def render_metadata_badge(
         formatted_date = executed_at
 
     return f'''
-        <div style="background: #edf2f7; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; margin: 24px 0; font-size: 13px; color: #718096;">
-            <strong style="color: #4a5568;">Research Topic:</strong> {research_topic}<br>
-            <strong style="color: #4a5568;">Strategy:</strong> {strategy_slug}<br>
-            <strong style="color: #4a5568;">Sources Analyzed:</strong> {evidence_count}<br>
-            <strong style="color: #4a5568;">Generated:</strong> {formatted_date}
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; padding: 24px 28px; margin: 0 0 32px 0; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);">
+            <div style="color: #ffffff; font-size: 22px; font-weight: 700; line-height: 1.3; margin: 0 0 12px 0;">{research_topic}</div>
+            <div style="color: rgba(255, 255, 255, 0.9); font-size: 14px; line-height: 1.6;">
+                <strong style="color: rgba(255, 255, 255, 0.95);">Strategy:</strong> {strategy_slug}<br>
+                <strong style="color: rgba(255, 255, 255, 0.95);">Generated:</strong> {formatted_date}
+            </div>
         </div>
     '''
 
 
 # =============================================================================
-# ALERT BANNER RENDERING
+# BANNER RENDERING
 # =============================================================================
+
+def render_disclaimer_banner() -> str:
+    """Render standard AI disclaimer banner for all emails.
+
+    Returns:
+        HTML string with disclaimer banner
+    """
+    return '''
+        <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-left: 3px solid #6c757d; padding: 14px 18px; margin-bottom: 28px; border-radius: 4px;">
+            <p style="margin: 0; color: #495057; font-size: 14px; line-height: 1.6;">
+                <strong style="color: #343a40;">ℹ️ Hinweis:</strong> Dieses Briefing wurde von einem KI-Agenten in Eigenrecherche erstellt und kann Ungenauigkeiten oder Fehler enthalten. Bitte prüfen Sie wenn notwendig alle Quellen sorgfältig und kontaktieren Sie das GenAI Team bei auftretenden Fehlern.
+            </p>
+        </div>
+    '''
+
 
 def render_alert_banner(banner_config: Optional[dict]) -> str:
     """Render a strategy-specific alert banner.
@@ -420,19 +436,21 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
 
     This creates a full HTML email with:
     - Email-safe structure (MSO tables, Outlook compatibility)
-    - Compact header with logo (left) + topic & date (right)
+    - Metadata card serves as the header (no separate header)
     - Professional footer with branding
     - Responsive design for mobile
+    - Power Automate paragraph wrapper escape
 
     Args:
-        research_topic: The research topic (shown in header)
-        date_str: Date string (shown below topic)
-        content_html: Main content HTML
+        research_topic: The research topic (not used - shown in metadata card)
+        date_str: Date string (not used - shown in metadata card)
+        content_html: Main content HTML (includes metadata card as first element)
 
     Returns:
         Complete HTML email ready for Outlook
     """
-    return f'''<!DOCTYPE html>
+    return f'''</p>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -444,13 +462,11 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
         img {{ -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }}
         body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f5f7; color: #2d3748; }}
         .email-container {{ max-width: 680px; margin: 0 auto; background-color: #ffffff; }}
-        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px 32px; }}
         .content {{ padding: 40px 40px 48px 40px; }}
         .footer {{ background: #2d3748; color: #cbd5e0; padding: 32px 40px; text-align: center; }}
         .footer p {{ margin: 6px 0; font-size: 14px; }}
         .footer-brand {{ font-weight: 600; color: #ffffff; font-size: 16px; }}
         @media only screen and (max-width: 600px) {{
-            .header {{ padding: 20px !important; }}
             .content {{ padding: 24px !important; }}
             .footer {{ padding: 24px !important; }}
         }}
@@ -467,21 +483,6 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
             <td align="center" style="padding: 24px 0;">
                 <table role="presentation" class="email-container" cellspacing="0" cellpadding="0" border="0" style="max-width: 680px; margin: 0 auto; background-color: #ffffff;">
                     <tr>
-                        <td class="header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px 32px;">
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                                <tr>
-                                    <td width="60" valign="middle" style="padding-right: 16px;">
-                                        <img src="{LOGO_URL}" alt="Research Agent" width="48" height="48" style="display: block; width: 48px; height: 48px; border-radius: 8px; background: rgba(255,255,255,0.95);">
-                                    </td>
-                                    <td valign="middle">
-                                        <div style="color: #ffffff; font-size: 18px; font-weight: 600; line-height: 1.3; margin: 0;">{research_topic}</div>
-                                        <div style="color: rgba(255, 255, 255, 0.85); font-size: 14px; font-weight: 400; margin-top: 4px;">{date_str}</div>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                    <tr>
                         <td class="content" style="padding: 40px 40px 48px 40px;">
                             {content_html}
                         </td>
@@ -497,7 +498,8 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
         </tr>
     </table>
 </body>
-</html>'''
+</html>
+<p>'''
 
 
 # =============================================================================
@@ -540,24 +542,28 @@ def render_complete_email(
     # Build content HTML
     content_parts = []
 
-    # 1. Alert banner (if applicable for strategy)
-    alert_banner = render_alert_banner(template_config.get('alert_banner'))
-    if alert_banner:
-        content_parts.append(alert_banner)
-
-    # 2. Metadata badge
+    # 1. Metadata badge (serves as header)
     metadata_badge = render_metadata_badge(
         research_topic, strategy_slug, evidence_count, executed_at
     )
     content_parts.append(metadata_badge)
 
-    # 3. Main content sections (markdown to HTML)
+    # 2. Standard disclaimer banner (appears for all emails)
+    disclaimer_banner = render_disclaimer_banner()
+    content_parts.append(disclaimer_banner)
+
+    # 3. Alert banner (if applicable for strategy)
+    alert_banner = render_alert_banner(template_config.get('alert_banner'))
+    if alert_banner:
+        content_parts.append(alert_banner)
+
+    # 4. Main content sections (markdown to HTML)
     for section in sections:
         if section:
             section_html = markdown_to_html(section)
             content_parts.append(section_html)
 
-    # 4. Citations
+    # 5. Citations
     citations_html = render_citations_html(citations)
     if citations_html:
         content_parts.append(citations_html)

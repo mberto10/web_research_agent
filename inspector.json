@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "prod": {
+      "transport": "http",
+      "url": "https://mcp-fruedenker.replit.app/mcp"
+    }
+  }
+}
