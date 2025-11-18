@@ -38,7 +38,7 @@ Based on Langfuse Launch Week 4 (Oct 2025), the API now supports:
 - `not_contains` - String does not contain
 - `in` - Value in list
 - `not_in` - Value not in list
-
+I
 ### Filter Structure
 
 ```json
