@@ -115,6 +115,22 @@ def _default_config() -> Dict[str, Any]:
     }
 
 
+def _load_config_from_yaml() -> Dict[str, Any]:
+    """Load configuration from config/settings.yaml (or defaults if missing)."""
+    base = _default_config()
+    settings_path = Path("config/settings.yaml")
+    if not yaml or not settings_path.exists():
+        return base
+    try:
+        with open(settings_path, "r", encoding="utf-8") as f:
+            settings = yaml.safe_load(f) or {}
+        _deep_merge(base, settings)
+        logger.info("✓ Loaded configuration from config/settings.yaml")
+    except Exception as exc:
+        logger.warning(f"⚠️ Failed to load config/settings.yaml, using defaults: {exc}")
+    return base
+
+
 async def load_config_from_db(db_session) -> Optional[Dict[str, Any]]:
     """Load configuration from database and populate global cache.
 
@@ -161,12 +177,9 @@ def load_config() -> Dict[str, Any]:
     if _CONFIG_CACHE is not None:
         return _CONFIG_CACHE
 
-    # Configuration not loaded from database
-    raise RuntimeError(
-        "Configuration not loaded from database. "
-        "Application must call load_config_from_db() during startup. "
-        "Please ensure 'llm_defaults' and 'prompts' settings exist in the database."
-    )
+    # No DB config yet—fall back to YAML/default settings
+    _CONFIG_CACHE = _load_config_from_yaml()
+    return _CONFIG_CACHE
 
 
 def clear_config_cache():

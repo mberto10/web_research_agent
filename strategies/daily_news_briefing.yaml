@@ -1,194 +1,128 @@
 meta:
   slug: daily_news_briefing
-  version: 3
+  version: 1
   category: news
   time_window: day
   depth: deep
 
 queries:
-  sonar: "{{topic}} latest news updates developments today"
-  exa_search: "{{topic}} recent developments news today"
-  exa_answer: "What are the most important recent events and developments regarding {{topic}} today?"
+  parallel_objective: >
+    Liefere die verlässlichsten Entwicklungen zu {{topic}} aus den vergangenen 24 Stunden.
+    Priorisiere konkrete Fakten (Daten, Zahlen, Zitate von Führungskräften) und stelle sicher,
+    dass jeder Punkt mit Quellenangaben für ein investorenorientiertes Briefing belegt ist.
+  parallel_queries: "[\"{{topic}} aktuelle Nachrichten {{current_date}}\",\"{{topic}} Entwicklungen letzte 24 Stunden\",\"{{topic}} Ausblick kommende 24 Stunden\"]"
+  sonar_prompt: "{{topic}} neueste Nachrichten Entwicklungen heute"
 
 tool_chain:
-  # Step 1: Broad overview with Sonar (with enhanced parameters)
-  - name: sonar_overview
+  - use: parallel_search.call
+    name: parallel_primary
+    description: "Parallel-Agentenrecherche für dichte Evidenz"
+    inputs:
+      objective: "{{parallel_objective}}"
+      search_queries: "{{parallel_queries}}"
+      mode: agentic
+      max_results: 8
+      excerpts: '{"max_chars_per_result": 4500}'
+      fetch_policy: '{"max_age_seconds": 21600}'
+    save_as: parallel_results
+
+  - name: sonar_pulse
     params:
-      max_results: 10
-      # New Sonar-specific parameters:
-      system_prompt: "Be precise and focus on recent, factual news developments. Include dates and specific details."
-      search_mode: "web"  # Options: "web" (default) or "academic"
-      search_recency_filter: "{{search_recency_filter}}"  # Now dynamic based on time_window
-      return_images: false  # Don't include images in results
-      return_related_questions: false  # Don't return related questions
-      temperature: 0.1  # Lower temperature for more factual responses
-      max_tokens: 1500  # Limit response length
-  
-  # Step 2: Semantic search with Exa (with date filtering)
-  - name: exa_search_semantic
+      max_results: 6
+      system_prompt: "Konzentriere dich auf faktenbasierte, zeitgestempelte Entwicklungen. Keine Spekulation."
+      search_mode: web
+      search_recency_filter: "{{search_recency_filter}}"
+      return_images: false
+      return_related_questions: false
+      temperature: 0.1
+      max_tokens: 1200
+    save_as: sonar_results
+
+  - name: sonar_gap_fill
+    description: "Optionaler Zusatzaufruf, wenn neue Blickwinkel oder Bestätigungen fehlen"
+    when: "{{needs_gap_fill}}"
     params:
-      num_results: 10
-      use_autoprompt: true
-      type: neural
-      start_published_date: "{{start_date}}"
-      end_published_date: "{{end_date}}"
-  
-  # Step 3: Get direct answer from Exa (using custom HTTP implementation)
-  - name: exa_answer_summary
-    params:
-      text: true  # Include source text in response
-  
-  # Step 4: Synthesize findings (simplified, no schema enforcement)
+      max_results: 4
+      system_prompt: "Liefere fehlende Bestätigungen oder frische Kontexte zu {{topic}}."
+      search_mode: web
+      search_recency_filter: day
+      return_images: false
+      return_related_questions: false
+      temperature: 0.2
+      max_tokens: 900
+    save_as: sonar_gap_results
+
   - use: llm_analyzer.call
-    description: "Create concise briefing"
-    max_tokens: 4000
+    description: "Verfasse optimiertes Briefing"
+    max_tokens: 4500
     inputs:
       prompt: |
-        Create a CONCISE daily news briefing from the following research results.
+        Erstelle ein umfassendes tägliches Nachrichtenbriefing auf Basis der gesammelten Evidenz.
 
-        Topic: {{topic}}
-        Current Date: {{current_date}}
-        Timeframe: {{start_date_natural}} to {{end_date_natural}}
+        Thema: {{topic}}
+        Aktuelles Datum: {{current_date}}
+        Evidenz-Sets: Parallel ({{parallel_results|length}} Einträge), Sonar ({{sonar_results|length}} Einträge), Gap Fill ({{sonar_gap_results|length}} Einträge)
 
-        Research Evidence ({{evidence_count}} items total):
+        Forschungsevidenz:
         {{evidence_text}}
 
         ---
 
-        # OUTPUT FORMAT (FOLLOW EXACTLY)
-
-        You MUST produce output in this EXACT format. Use superscript citation numbers [1], [2], etc. NO URLs anywhere except the Sources section.
-
-        ---
+        Halte dich exakt an diese Struktur:
 
         ## EXECUTIVE SUMMARY
+        2-3 Sätze zu den wichtigsten Entwicklungen, mit hochgestellten Zitaten.
 
-        2-3 sentences summarizing key developments. Citations as superscript numbers only.
-
-        **GOOD EXAMPLE:**
-        "Germany received U.S. clearance for SM-6/SM-2 missile sales (~$3.2B) for new F127 frigates.[1] The U.S. Air Force conducted B61-12 inert bomb loading tests on F-35 aircraft.[2] Congressional NDAA work continues with elevated oversight scrutiny.[3]"
-
-        **BAD EXAMPLE (DO NOT DO THIS):**
-        "Germany received clearance (reported Nov 17) amid continued European investments. Sources: Breaking Defense https://breakingdefense.com/tag/germany/; Air & Space Forces https://www.airandspaceforces.com..."
-
-        ---
+        ## BREAKING NEWS
+        - Aufzählung von Entwicklungen <6h mit Zeitstempel. Quellen angeben.
 
         ## KEY DEVELOPMENTS
+        ### Überschrift
+        2-3 Sätze mit konkreten Fakten, Abschluss mit Zitaten.[1][2]
 
-        ### Clear Headline Here
-
-        2-3 sentences with specific facts, numbers, names. End with citation numbers.[1][2]
-
-        ### Another Headline
-
-        More specific content with data points.[3]
-
-        **GOOD EXAMPLE:**
-        "### U.S. Clears Missile Sales for Germany's F127 Frigates
-
-        The U.S. government notified Congress of a potential $3.2 billion Foreign Military Sale to equip Germany's new F127-class frigates with SM-6 and SM-2 missiles.[1]"
-
-        **BAD EXAMPLE:**
-        "• U.S. clears SM 6/SM 2 missile sales: U.S. government notified Congress... Source: (Nov 17, 2025) https://breakingdefense.com/tag/germany/"
-
-        ---
+        (Erstelle 3-5 solcher Abschnitte.)
 
         ## ANALYSIS BY THEME
+        ### Themenname
+        Ein Satz Fazit plus 2-3 Bulletpoints, die Erkenntnisse über Quellen verbinden.
 
-        ### Theme Name (e.g., Space & ISR Activity)
-
-        One sentence overview of this theme's significance.
-
-        - **Bold item title** — Specific details with numbers or dates.[1]
-        - **Another item** — More concrete information.[2][3]
-
-        **GOOD EXAMPLE:**
-        "### Space & ISR Activity
-
-        Renewed procurement and launch activity highlights dual civilian/military capabilities.
-
-        - **U.S. Space Force C2 FMS** — Market research announced for potential sale to Canada.[4]
-        - **Sentinel-6B Launch** — Successfully launched from Vandenberg at 06:21 CET.[5]"
-
-        **BAD EXAMPLE:**
-        "Theme: Space/exports — export and foreign military sales activity...
-        • U.S. Space Force conducting market research (Nov 17) [https://aviationweek.com/...]"
-
-        ---
+        ## MARKET IMPACT (weglassen, falls nicht relevant)
+        Kurzer Absatz zu Auswirkungen für Investoren/Stakeholder.
 
         ## NOTABLE MENTIONS
-
-        - Brief item with key detail.[1]
-        - Another item.[2]
-
-        ---
+        - Weitere prägnante Updates.
 
         ## SOURCES
+        [1] Publikation (YYYY-MM-DD): https://voll-url.com
+        ...
 
-        [1] Publication Name (YYYY-MM-DD): https://full-url.com
-        [2] Another Source (YYYY-MM-DD): https://full-url.com
-
-        ---
-
-        # ABSOLUTE RULES
-
-        ✅ REQUIRED:
-        - Use ONLY superscript citation numbers [1], [2], [3] in body text
-        - ALL URLs go ONLY in the Sources section at the end
-        - Use ### for each Key Development headline
-        - Use ### for each Theme name in Analysis section
-        - Use **bold** for bullet point titles
-        - Add --- horizontal rules between major sections
-        - Keep Executive Summary to 2-3 sentences MAX
-        - Number sources consecutively starting from [1]
-
-        ❌ FORBIDDEN:
-        - NO raw URLs in body text (e.g., https://example.com)
-        - NO inline URL patterns like "Source: (Date) https://..."
-        - NO parenthetical URLs like "[text](url)" in prose
-        - NO "Key sources:" lists in body sections
-        - NO conversational text ("If you'd like...", "I can help...")
-        - NO text after the Sources section
-
-        ---
-
-        CRITICAL: End IMMEDIATELY after the Sources section. No additional text.
+        Regeln:
+        - Verwende hochgestellte Zitatnummern im Fließtext; URLs nur im Quellenabschnitt.
+        - Trenne jede Sektion mit ---.
+        - Beende den Text direkt nach dem Quellenabschnitt.
     save_as: briefing_content
     phase: finalize
 
 limits:
-  max_results: 20
+  max_results: 18
   max_llm_queries: 2
 
 finalize:
   reactive: false
   instructions: |
-    You are writing a daily news briefing about {{topic}}.
-    
-    First, review the evidence collected to see if you have recent, comprehensive coverage.
-    
-    If you find that:
-    - All evidence is older than 6 hours and this is breaking news: 
-      Use exa_search("{{topic}} latest breaking today", num_results=5, search_recency_filter="day")
-    
-    - There are conflicting reports about key facts or numbers:
-      Use exa_answer("{{topic}} verified facts timeline of events today")
-    
-    - You have general information but lack today's specific updates:
-      Use sonar_call("{{topic}} what happened today latest updates", search_recency_filter="day")
-    
-    Only make ONE tool call if absolutely necessary for report completeness.
-    
-    Then write these sections:
-    - Breaking News (most recent developments)
-    - Key Developments (3-5 major items with details)
-    - Analysis by Theme (2-3 thematic sections based on the news)
-    - Market Impact (if relevant)
-    - Notable Mentions (other relevant updates)
-    - Sources (complete numbered list with dates and full URLs)
-    
-    IMPORTANT:
-    - Use [1], [2], etc. to reference sources in the text
-    - List all sources at the end with numbers, dates, and complete URLs
-    - Do NOT add any text like "If you want I can produce..." or offer additional services
-    - End the report immediately after the Sources section
+    Du schreibst ein tägliches Nachrichtenbriefing für {{topic}}.
+
+    1. Prüfe die Aktualität der Evidenz. Ist kein Parallel-Ergebnis jünger als 6 Stunden, rufe parallel_search erneut mit fetch_policy {"max_age_seconds":7200} auf.
+    2. Bei widersprüchlichen Fakten führe sonar_call("{{topic}} verifizierte Fakten Zeitstrahl heute", search_recency_filter="day") aus.
+    3. Maximal EIN zusätzlicher Tool-Aufruf zur Nachbesserung.
+
+    Erstelle anschließend:
+    - Executive Summary (2-3 Sätze)
+    - Breaking News
+    - Key Developments (3-5 Abschnitte)
+    - Analysis by Theme (2-3 Themen)
+    - Market Impact (falls relevant)
+    - Notable Mentions
+    - Sources (vollständige URLs mit Datum)
+
+    Verwende Zitierformat [1], [2] im Text, liste alle Quellen am Ende und beende den Bericht nach dem Quellenabschnitt.

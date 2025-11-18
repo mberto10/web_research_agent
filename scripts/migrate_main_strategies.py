@@ -16,21 +16,20 @@ from pathlib import Path
 import yaml
 from datetime import datetime
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from api.database import db_manager
-from api.crud import create_strategy, update_global_setting
+from sqlalchemy.exc import IntegrityError
 
+from api.crud import create_strategy, update_global_setting, update_strategy as crud_update_strategy
+
+STRATEGIES_DIR = ROOT / "strategies"
+SETTINGS_PATH = ROOT / "config" / "settings.yaml"
 
 # Main strategies to migrate (per user requirements)
 MAIN_STRATEGIES = [
-    "daily_news_briefing",  # Most important
-    "news/real_time_briefing",
-    "company/dossier",
-    "financial_research",
-    "financial_news_reactive",
-    "general/week_overview",
+    "daily_news_briefing",
 ]
 
 
@@ -38,7 +37,7 @@ async def migrate_strategy(db, slug: str, dry_run: bool = False):
     """Migrate a single strategy from YAML to database."""
     try:
         # Load YAML file
-        yaml_path = Path(f"strategies/{slug}.yaml")
+        yaml_path = STRATEGIES_DIR / f"{slug}.yaml"
         if not yaml_path.exists():
             print(f"  ⚠️  {slug}: YAML file not found, skipping")
             return False
@@ -51,9 +50,8 @@ async def migrate_strategy(db, slug: str, dry_run: bool = False):
             return False
 
         # Merge with LLM config from settings.yaml if it exists
-        settings_path = Path("config/settings.yaml")
-        if settings_path.exists():
-            with open(settings_path, 'r') as f:
+        if SETTINGS_PATH.exists():
+            with open(SETTINGS_PATH, 'r') as f:
                 settings = yaml.safe_load(f)
 
             # Check if there's strategy-specific LLM config
@@ -67,10 +65,19 @@ async def migrate_strategy(db, slug: str, dry_run: bool = False):
             print(f"  ✓ {slug}: Would migrate ({len(str(yaml_content))} bytes)")
             return True
 
-        # Insert into database
-        await create_strategy(db, slug, yaml_content)
-        print(f"  ✓ {slug}: Migrated successfully")
-        return True
+        # Insert or update in database
+        try:
+            await create_strategy(db, slug, yaml_content)
+            print(f"  ✓ {slug}: Migrated successfully")
+            return True
+        except IntegrityError:
+            await db.rollback()
+            updated = await crud_update_strategy(db, slug, yaml_content)
+            if updated:
+                print(f"  ✓ {slug}: Updated existing strategy")
+                return True
+            print(f"  ✗ {slug}: Failed to update existing strategy")
+            return False
 
     except Exception as e:
         print(f"  ✗ {slug}: Failed to migrate - {e}")
@@ -80,12 +87,11 @@ async def migrate_strategy(db, slug: str, dry_run: bool = False):
 async def migrate_global_settings(db, dry_run: bool = False):
     """Migrate global LLM defaults and prompts from settings.yaml to database."""
     try:
-        settings_path = Path("config/settings.yaml")
-        if not settings_path.exists():
+        if not SETTINGS_PATH.exists():
             print("  ⚠️  config/settings.yaml not found, skipping global settings")
             return False
 
-        with open(settings_path, 'r') as f:
+        with open(SETTINGS_PATH, 'r') as f:
             settings = yaml.safe_load(f)
 
         if not settings:
