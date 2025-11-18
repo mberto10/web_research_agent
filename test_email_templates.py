@@ -86,8 +86,8 @@ def test_complete_email_rendering():
     ]
 
     citations = [
-        {"number": 1, "url": "https://example.com/1", "text": "Source 1", "snippet": "Relevant snippet from source 1."},
-        {"number": 2, "url": "https://example.com/2", "text": "Source 2", "snippet": None},
+        {"number": 1, "url": "https://example.com/1", "text": "Source 1", "date": "2025-11-15"},
+        {"number": 2, "url": "https://example.com/2", "text": "Source 2", "date": "2025-11-10"},
     ]
 
     executed_at = datetime.utcnow().isoformat()
@@ -117,7 +117,7 @@ def test_complete_email_rendering():
         assert "<html" in html, "Missing html tag"
         assert "Web Research Agent" in html, "Missing footer branding"
         assert "linear-gradient" in html, "Missing gradient header"
-        assert "Sources & Citations" in html, "Missing citations section"
+        assert "Quellensammlung" in html, "Missing citations section"
         assert "Test Research Topic" in html, "Missing research topic"
 
         # Check for strategy-specific elements

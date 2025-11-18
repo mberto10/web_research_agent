@@ -206,7 +206,7 @@ def extract_and_number_citations(sections: list, evidence: list) -> tuple:
     Returns:
         tuple: (modified_sections, citations_registry)
         - modified_sections: Sections with links replaced by superscripts
-        - citations_registry: List of dicts with {number, url, text, snippet}
+        - citations_registry: List of dicts with {number, url, text, snippet, date}
     """
     # Step 1: Find all markdown links in order of appearance
     citations_registry = []
@@ -228,7 +228,8 @@ def extract_and_number_citations(sections: list, evidence: list) -> tuple:
                     "number": number,
                     "url": url,
                     "text": link_text,
-                    "snippet": None
+                    "snippet": None,
+                    "date": None
                 })
 
     # Step 2: Merge evidence citations
@@ -238,19 +239,23 @@ def extract_and_number_citations(sections: list, evidence: list) -> tuple:
             url = ev.get('url', '').strip()
             title = ev.get('title', '')
             snippet = ev.get('snippet', '')
+            date = ev.get('date', '')
         else:
             url = getattr(ev, 'url', '').strip()
             title = getattr(ev, 'title', '')
             snippet = getattr(ev, 'snippet', '')
+            date = getattr(ev, 'date', '')
 
         if not url:
             continue
 
         if url in url_to_number:
-            # URL already exists from inline link, add snippet
+            # URL already exists from inline link, add snippet and date
             idx = url_to_number[url] - 1
             if not citations_registry[idx]['snippet'] and snippet:
                 citations_registry[idx]['snippet'] = snippet
+            if not citations_registry[idx]['date'] and date:
+                citations_registry[idx]['date'] = date
         else:
             # New URL from evidence
             number = len(citations_registry) + 1
@@ -259,7 +264,8 @@ def extract_and_number_citations(sections: list, evidence: list) -> tuple:
                 "number": number,
                 "url": url,
                 "text": title,
-                "snippet": snippet
+                "snippet": snippet,
+                "date": date
             })
 
     # Step 3: Replace markdown links with text + superscript
@@ -292,7 +298,7 @@ def render_citations_html(citations: list) -> str:
     """Render citations as styled HTML cards.
 
     Args:
-        citations: List of citation dicts with {number, url, text, snippet}
+        citations: List of citation dicts with {number, url, text, date}
 
     Returns:
         HTML string with citation section
@@ -300,25 +306,21 @@ def render_citations_html(citations: list) -> str:
     if not citations or len(citations) == 0:
         return ''
 
-    MAX_SNIPPET_LENGTH = 200
     citation_items = []
 
     for citation in citations:
         number = citation.get('number', '?')
         url = citation.get('url', '#')
-        snippet = citation.get('snippet', '')
+        date = citation.get('date', '')
         title = citation.get('text', citation.get('title', 'Source'))
 
-        # Truncate snippet if too long
-        if snippet and len(snippet) > MAX_SNIPPET_LENGTH:
-            snippet = snippet[:MAX_SNIPPET_LENGTH].rsplit(' ', 1)[0] + '...'
-
-        if snippet:
+        # Build citation card with number, URL, and date
+        if date:
             citation_html = f'''
             <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 12px;">
                 <div style="font-size: 15px; font-weight: 600; color: #2d3748; margin: 0 0 8px 0;">[{number}] {title}</div>
                 <a href="{url}" style="font-size: 14px; color: #667eea; text-decoration: none; word-break: break-all; display: block; margin-bottom: 8px;">{url}</a>
-                <p style="font-size: 14px; color: #718096; line-height: 1.5; margin: 0;">{snippet}</p>
+                <p style="font-size: 14px; color: #718096; line-height: 1.5; margin: 0;">{date}</p>
             </div>
             '''
         else:
@@ -334,8 +336,8 @@ def render_citations_html(citations: list) -> str:
     citations_html = ''.join(citation_items)
 
     return f'''
-        <div style="background: #f7fafc; border-left: 4px solid #667eea; padding: 24px; margin: 32px 0; border-radius: 4px;">
-            <h2 style="margin-top: 0; color: #2d3748; font-size: 20px; border-bottom: none;">📚 Sources & Citations</h2>
+        <div style="background: #f7fafc; padding: 24px; margin: 32px 0; border-radius: 4px;">
+            <h2 style="margin-top: 0; color: #2d3748; font-size: 20px; border-bottom: none;">Quellensammlung</h2>
             {citations_html}
         </div>
     '''

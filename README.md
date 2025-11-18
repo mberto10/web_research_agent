@@ -184,9 +184,11 @@ from core.state import State
 from tools import register_tool
 from tools.sonar import SonarAdapter
 from tools.exa import ExaAdapter
+from tools.parallel import ParallelSearchAdapter
 
 register_tool(SonarAdapter())
 register_tool(ExaAdapter())
+register_tool(ParallelSearchAdapter())
 
 graph = build_graph()
 state = State(user_request="daily briefing: large language models")
@@ -197,7 +199,8 @@ print("\n\n".join(final.sections))
 ## Environment
 
 - `OPENAI_API_KEY` required for LLM calls.
-- Tool adapters may require their own keys (e.g., `EXA_API_KEY`, `SONAR_API_KEY` or `PERPLEXITY_API_KEY`).
+- Tool adapters may require their own keys (e.g., `EXA_API_KEY`, `SONAR_API_KEY` / `PERPLEXITY_API_KEY`, `PARALLEL_API_KEY`).
+- Optional: override the Parallel beta header with `PARALLEL_BETA_HEADER` if Parallel rotates their preview flag.
 - Optional Langfuse tracing via `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`.
 
 ## Testing

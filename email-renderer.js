@@ -159,7 +159,6 @@ const createEmailHTML = (title, subtitle, contentHTML, footerText = null) => {
         /* Citation styles */
         .citations-section {
             background: #f7fafc;
-            border-left: 4px solid #667eea;
             padding: 24px;
             margin: 32px 0;
             border-radius: 4px;
@@ -200,7 +199,7 @@ const createEmailHTML = (title, subtitle, contentHTML, footerText = null) => {
             margin-bottom: 8px;
         }
 
-        .citation-snippet {
+        .citation-date {
             font-size: 14px;
             color: #718096;
             line-height: 1.5;
@@ -297,22 +296,23 @@ const renderCitations = (citations) => {
     }
 
     const citationItems = citations.map((citation, index) => {
-        const title = citation.title || 'Untitled Source';
+        const title = citation.title || citation.text || 'Untitled Source';
         const url = citation.url || '#';
-        const snippet = citation.snippet || '';
+        const date = citation.date || '';
+        const number = citation.number || (index + 1);
 
         return `
             <div class="citation-item">
-                <div class="citation-title">[${index + 1}] ${title}</div>
+                <div class="citation-title">[${number}] ${title}</div>
                 <a href="${url}" class="citation-url">${url}</a>
-                ${snippet ? `<p class="citation-snippet">${snippet}</p>` : ''}
+                ${date ? `<p class="citation-date">${date}</p>` : ''}
             </div>
         `;
     }).join('');
 
     return `
         <div class="citations-section">
-            <h2>📚 Sources & Citations</h2>
+            <h2>Quellensammlung</h2>
             ${citationItems}
         </div>
     `;

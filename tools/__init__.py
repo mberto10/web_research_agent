@@ -3,6 +3,7 @@
 from .registry import register_tool, get_tool, is_registered
 from .sonar import SonarAdapter
 from .exa import ExaAdapter
+from .parallel import ParallelSearchAdapter
 from core.llm_analyzer import LLMAnalyzerAdapter
 
 
@@ -25,6 +26,12 @@ def register_default_adapters(silent: bool = True) -> None:
         except Exception:
             if not silent:
                 raise
+    if not is_registered("parallel_search"):
+        try:
+            register_tool(ParallelSearchAdapter())
+        except Exception:
+            if not silent:
+                raise
     if not is_registered("llm_analyzer"):
         try:
             register_tool(LLMAnalyzerAdapter())
@@ -39,6 +46,7 @@ __all__ = [
     "is_registered",
     "SonarAdapter",
     "ExaAdapter",
+    "ParallelSearchAdapter",
     "LLMAnalyzerAdapter",
     "register_default_adapters",
 ]

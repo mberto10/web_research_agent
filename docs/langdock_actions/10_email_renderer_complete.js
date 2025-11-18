@@ -86,13 +86,13 @@ const createEmailHTML = (title, subtitle, contentHTML) => {
         .content a { color: #667eea; text-decoration: none; font-weight: 500; }
         .content a:hover { text-decoration: underline; }
         .content strong { color: #2d3748; font-weight: 600; }
-        .citations-section { background: #f7fafc; border-left: 4px solid #667eea; padding: 24px; margin: 32px 0; border-radius: 4px; }
+        .citations-section { background: #f7fafc; padding: 24px; margin: 32px 0; border-radius: 4px; }
         .citations-section h2 { margin-top: 0; color: #2d3748; font-size: 20px; border-bottom: none; }
         .citation-item { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 12px; }
         .citation-item:last-child { margin-bottom: 0; }
         .citation-title { font-size: 16px; font-weight: 600; color: #2d3748; margin: 0 0 8px 0; }
         .citation-url { font-size: 14px; color: #667eea; text-decoration: none; word-break: break-all; display: block; margin-bottom: 8px; }
-        .citation-snippet { font-size: 14px; color: #718096; line-height: 1.5; margin: 0; }
+        .citation-date { font-size: 14px; color: #718096; line-height: 1.5; margin: 0; }
         .footer { background: #2d3748; color: #cbd5e0; padding: 32px 40px; text-align: center; }
         .footer p { margin: 6px 0; font-size: 14px; }
         .footer-brand { font-weight: 600; color: #ffffff; font-size: 16px; }
@@ -137,22 +137,23 @@ const renderCitations = (citations) => {
     if (!citations || citations.length === 0) return '';
 
     const citationItems = citations.map((citation, idx) => {
-        const title = citation.title || 'Untitled Source';
+        const title = citation.title || citation.text || 'Untitled Source';
         const url = citation.url || '#';
-        const snippet = citation.snippet || '';
+        const date = citation.date || '';
+        const number = citation.number || (idx + 1);
 
         return `
             <div class="citation-item">
-                <div class="citation-title">[${idx + 1}] ${title}</div>
+                <div class="citation-title">[${number}] ${title}</div>
                 <a href="${url}" class="citation-url">${url}</a>
-                ${snippet ? `<p class="citation-snippet">${snippet}</p>` : ''}
+                ${date ? `<p class="citation-date">${date}</p>` : ''}
             </div>
         `;
     }).join('');
 
     return `
         <div class="citations-section">
-            <h2>📚 Sources & Citations</h2>
+            <h2>Quellensammlung</h2>
             ${citationItems}
         </div>
     `;
