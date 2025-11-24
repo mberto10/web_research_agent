@@ -11,7 +11,7 @@ queries:
     Priorisiere konkrete Fakten (Daten, Zahlen, Zitate von Führungskräften) und stelle sicher,
     dass jeder Punkt mit Quellenangaben für ein investorenorientiertes Briefing belegt ist.
   parallel_queries: "[\"{{topic}} aktuelle Nachrichten {{current_date}}\",\"{{topic}} Entwicklungen letzte 24 Stunden\",\"{{topic}} Ausblick kommende 24 Stunden\"]"
-  sonar_prompt: "{{topic}} neueste Nachrichten Entwicklungen heute"
+  sonar_prompt: "{{topic}} letzte 24h faktenbasiert: Zeitstempel, Akteur, Maßzahl/Zitat, Quelle"
 
 tool_chain:
   - use: parallel_search.call
@@ -29,7 +29,11 @@ tool_chain:
   - name: sonar_pulse
     params:
       max_results: 6
-      system_prompt: "Konzentriere dich auf faktenbasierte, zeitgestempelte Entwicklungen. Keine Spekulation."
+      system_prompt: |
+        Sammle faktenbasierte Updates der letzten 24h zu {{topic}}.
+        Format pro Fund: Datum/Uhrzeit, Akteur, konkrete Aussage/zahl, Quelle.
+        Bevorzuge Primärquellen (Offizielle Statements, Behörden, Firmenblogs) vor Zweitberichten.
+        Keine Spekulationen oder Meinungen; nur verifizierbare Claims mit URL.
       search_mode: web
       search_recency_filter: "{{search_recency_filter}}"
       return_images: false
@@ -43,7 +47,11 @@ tool_chain:
     when: "{{needs_gap_fill}}"
     params:
       max_results: 4
-      system_prompt: "Liefere fehlende Bestätigungen oder frische Kontexte zu {{topic}}."
+      system_prompt: |
+        Fülle fehlende Blickwinkel zu {{topic}}:
+        - Suche nach widersprechenden oder bestätigenden Fakten der letzten 24h.
+        - Ziehe alternative Regionen/Sprachen in Betracht, aber bleibe bei Primärquellen.
+        Gib je Fund: Zeitstempel, Akteur, Fakt/Zitat, URL.
       search_mode: web
       search_recency_filter: day
       return_images: false
@@ -61,42 +69,41 @@ tool_chain:
 
         Thema: {{topic}}
         Aktuelles Datum: {{current_date}}
+        Sprache: Deutsch (bitte alle Inhalte auf Deutsch verfassen; Abschnittstitel können Englisch bleiben).
 
         Forschungsevidenz:
         {{evidence_text}}
 
-        ---
+        Halte dich exakt an diese Struktur (Überschriften auf Deutsch):
 
-        Halte dich exakt an diese Struktur:
-
-        ## EXECUTIVE SUMMARY
+        ## KURZÜBERBLICK
         2-3 Sätze zu den wichtigsten Entwicklungen. Verweise auf Quellen mit [Kurzbezeichnung](URL) im Text.
 
-        ## BREAKING NEWS
+        ## EILMELDUNGEN
         - Aufzählung von Entwicklungen <6h mit Zeitstempel. Quellen als [Text](URL) verlinken.
 
-        ## KEY DEVELOPMENTS
+        ## WICHTIGE ENTWICKLUNGEN
         ### Überschrift
         2-3 Sätze mit konkreten Fakten. Quellen als [Kurzname](URL) verlinken.
 
         (Erstelle 3-5 solcher Abschnitte.)
 
-        ## ANALYSIS BY THEME
+        ## ANALYSE NACH THEMA
         ### Themenname
         Ein Satz Fazit plus 2-3 Bulletpoints. Quellen als [Text](URL) verlinken.
 
-        ## MARKET IMPACT (weglassen, falls nicht relevant)
+        ## MARKTAUSWIRKUNG (weglassen, falls nicht relevant)
         Kurzer Absatz zu Auswirkungen für Investoren/Stakeholder. Quellen als [Text](URL) verlinken.
 
-        ## NOTABLE MENTIONS
+        ## WEITERE NENNUNGEN
         - Weitere prägnante Updates als Bulletpoints. Quellen als [Text](URL) verlinken.
 
         Regeln:
         - Verlinke alle Quellenverweise im Markdown-Format: [Beschreibender Text](vollständige-URL)
         - Verwende ### für Unterpunkte unter ## Hauptsektionen (korrekte Überschriftenhierarchie beachten)
         - Keine horizontalen Trennlinien zwischen Sektionen einfügen
-        - KEINE separate "## SOURCES" Sektion erstellen - alle Quellen sind inline verlinkt
-        - Beende den Text direkt nach "## NOTABLE MENTIONS"
+        - KEINE separate Quellen-Sektion erstellen; alle Quellen bleiben inline verlinkt
+        - Beende den Text direkt nach dem Abschnitt "## WEITERE NENNUNGEN"
     save_as: briefing_content
     phase: finalize
 
@@ -113,13 +120,15 @@ finalize:
     2. Bei widersprüchlichen Fakten führe sonar_call("{{topic}} verifizierte Fakten Zeitstrahl heute", search_recency_filter="day") aus.
     3. Maximal EIN zusätzlicher Tool-Aufruf zur Nachbesserung.
 
-    Erstelle anschließend:
-    - Executive Summary (2-3 Sätze)
-    - Breaking News
-    - Key Developments (3-5 Abschnitte)
-    - Analysis by Theme (2-3 Themen)
-    - Market Impact (falls relevant)
-    - Notable Mentions
-    - Sources (vollständige URLs mit Datum)
+    Erstelle anschließend die identische Struktur wie oben (Deutsch), ohne zusätzliche Abschnittstrennungen und ohne separate Quellenliste:
+    - KURZÜBERBLICK (2-3 Sätze)
+    - EILMELDUNGEN
+    - WICHTIGE ENTWICKLUNGEN (3-5 Abschnitte)
+    - ANALYSE NACH THEMA (2-3 Themen)
+    - MARKTAUSWIRKUNG (falls relevant)
+    - WEITERE NENNUNGEN
 
-    Verwende Zitierformat [1], [2] im Text, liste alle Quellen am Ende und beende den Bericht nach dem Quellenabschnitt.
+    Regeln:
+    - Keine horizontalen Trennlinien ("---") einfügen.
+    - KEINE "Sources"/Quellen-Sektion anhängen; alle Quellen bleiben inline als [Text](URL).
+    - Beende den Text direkt nach "## WEITERE NENNUNGEN".

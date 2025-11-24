@@ -1,0 +1,126 @@
+meta:
+  slug: weekly_topic_overview
+  version: 1
+  category: topic
+  time_window: week
+  depth: deep
+
+queries:
+  parallel_objective: >
+    Liefere einen Wochenüberblick zu {{topic}} mit Fokus auf Politik/Regulierung, Unternehmensentscheidungen, Finanzierung/M&A, Forschung/Standards und Kontroversen.
+  parallel_queries: >
+    ["{{topic}} policy regulation update",
+     "{{topic}} corporate moves announcements",
+     "{{topic}} funding m&a deals",
+     "{{topic}} research standards draft",
+     "{{topic}} controversies disputes investigation"]
+  sonar_prompt: "{{topic}} letzte 7 Tage: Politik/Regulierung, Corporate, Deals, Forschung, Kontroversen"
+
+tool_chain:
+  - use: parallel_search.call
+    name: parallel_topic_primary
+    description: "Parallel-Suche entlang der fünf Facetten."
+    inputs:
+      objective: "{{parallel_objective}}"
+      search_queries: "{{parallel_queries}}"
+      mode: agentic
+      max_results: 12
+      excerpts: '{"max_chars_per_result": 4500}'
+      fetch_policy: '{"max_age_seconds": 604800}'
+    save_as: parallel_results
+
+  - name: sonar_gap_fill
+    description: "Multi-dimensionale Themen-Exploration"
+    when: "unique_sources < 8"
+    params:
+      max_results: 6
+      system_prompt: |
+        Du bist ein Research-Agent für das Thema {{topic}}.
+
+        ANALYSIERE die 5 Facetten-Matrix und identifiziere Defizite:
+        - Politik/Regulierung
+        - Unternehmensentscheidungen
+        - Finanzierung/M&A
+        - Forschung/Standards
+        - Kontroversen/Disputes
+
+        SELBSTSTÄNDIGE EXPLORATION:
+        1. Für jede unterrepräsentierte Facette:
+           - Navigiere den relevanten semantischen Raum
+           - Suche in facetten-spezifischen Informationsquellen
+           - Folge Verbindungen zu verwandten Konzepten und Akteuren
+
+        2. Adaptive Suchstrategie:
+           - Bei wenig Funden: Erweitere auf adjacent concepts oder frühere/spätere Zeiträume
+           - Bei vielen generischen Treffern: Verfeinere auf spezifischere Aspekte
+           - Bei einem dominanten Narrativ: Suche explizit nach alternativen Perspektiven
+
+        3. Multi-Stakeholder-Perspektive:
+           - Betrachte das Thema aus Sicht von: Regierungen, Konzernen, Startups, NGOs, Forschung
+           - Suche in unterschiedlichen Informations-Ökosystemen für jede Perspektive
+           - Identifiziere Konflikte und Konvergenzen zwischen Stakeholdern
+
+        4. Geografische und kulturelle Diversität:
+           - Wenn US-lastig: Exploriere EU, APAC, LatAm Entwicklungen
+           - Beziehe internationale Regulierungs-Divergenzen ein
+           - Suche nach regional-spezifischen Innovationen oder Widerständen
+
+        VERIFIKATION:
+        - Bevorzuge Primärquellen mit konkreten Fakten über sekundäre Berichterstattung
+        - Bei unklaren Claims: Suche nach Bestätigung oder Widerlegung
+        - Trianguliere wichtige Informationen über mehrere Quellen
+
+        OUTPUT je Fund: Datum, Akteur, präziser Claim/Zitat/Zahl, URL
+
+        Nur verifizierbare Fakten der letzten 7 Tage.
+      search_mode: web
+      search_recency_filter: week
+      return_images: false
+      return_related_questions: false
+      temperature: 0.3
+      max_tokens: 1500
+    save_as: sonar_gap_results
+
+  - use: llm_analyzer.call
+    description: "Schreibe Wochenupdate zu Themenentwicklungen."
+    max_tokens: 4800
+    inputs:
+      prompt: |
+        Erstelle ein Wochenupdate zu {{topic}} mit den wichtigsten neuen Entwicklungen.
+
+        Zeitraum: letzte 7 Tage
+        Sprache: Deutsch (alle Inhalte auf Deutsch verfassen; Abschnittstitel dürfen Englisch bleiben).
+        Evidenz:
+        {{evidence_text}}
+
+        Struktur (Überschriften auf Deutsch):
+        ## ZUSAMMENFASSUNG
+        2-3 Sätze zu den wichtigsten Bewegungen der Woche. Quellen inline: [Text](URL).
+
+        ## NEUE ENTWICKLUNGEN
+        - Politik/Regulierung: Neue Maßnahmen, Anhörungen, Policy-Änderungen (mit Datum, Quelle)
+        - Unternehmen: Neue Ankündigungen, Launches, strategische Moves (mit Datum, Quelle)
+        - Finanzierung / M&A: Neue Deals, Finanzierungsrunden, Exits (mit Datum, Quelle)
+        - Forschung / Standards: Neue Papers, Spezifikationen, Durchbrüche (mit Datum, Quelle)
+        - Kontroversen: Neue Disputes, Untersuchungen, Kritik (mit Datum, Quelle)
+
+        ## AUSBLICK
+        - 2-3 Entwicklungen, Fragen oder Trends, die man beobachten sollte
+
+        Regeln:
+        - Fokus auf NEUE Informationen der letzten 7 Tage
+        - Präzise, faktisch, zeitgestempelt
+        - Quellen IM Text verlinken: [Kurztext](vollständige-URL)
+        - Nicht selbst nummerieren, keine separate Quellenliste; die E-Mail-Vorlage rendert die Quellensammlung automatisch
+        - Keine Trennlinien einfügen
+    save_as: weekly_overview
+    phase: finalize
+
+limits:
+  max_results: 18
+  max_llm_queries: 2
+
+finalize:
+  reactive: false
+  instructions: |
+    Wenn weniger als 3 Facetten befüllt sind, erlaube genau einen zusätzlichen Sonar-Call mit recency=week.

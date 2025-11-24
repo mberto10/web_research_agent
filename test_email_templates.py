@@ -10,7 +10,7 @@ from api.email_templates import (
     extract_and_number_citations,
     STRATEGY_TEMPLATES
 )
-from datetime import datetime
+from datetime import datetime, timezone
 
 def test_strategy_templates():
     """Test that all strategies have proper configurations."""
@@ -182,6 +182,31 @@ A [link](https://example.com) here.
     print()
 
 
+def test_email_wrapper_boundaries():
+    """Ensure email wrapper has no stray leading/ending paragraph tags."""
+    print("Testing email wrapper boundaries...")
+
+    from api.email_templates import render_complete_email
+
+    html = render_complete_email(
+        research_topic="Boundary Test",
+        sections=["Test body"],
+        citations=[],
+        strategy_slug="daily_news_briefing",
+        evidence_count=0,
+        executed_at=datetime.now(timezone.utc).isoformat(),
+        current_date="November 17, 2025"
+    )
+
+    stripped = html.lstrip()
+    assert stripped.startswith("<!DOCTYPE html>"), "Email HTML should start with DOCTYPE, found leading characters"
+    assert not stripped.startswith("</p>"), "Email HTML should not start with stray closing paragraph tag"
+    assert not html.rstrip().endswith("<p>"), "Email HTML should not end with stray opening paragraph tag"
+
+    print("  ✅ Wrapper starts at DOCTYPE and ends cleanly")
+    print()
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("Email Template Engine Test Suite")
@@ -192,6 +217,7 @@ if __name__ == "__main__":
     test_citation_extraction()
     test_subject_line_generation()
     test_markdown_conversion()
+    test_email_wrapper_boundaries()
     test_complete_email_rendering()
 
     print("=" * 60)

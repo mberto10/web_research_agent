@@ -88,6 +88,45 @@ STRATEGY_TEMPLATES = {
         "subject_prefix": "📅 Weekly Overview:",
         "alert_banner": None
     },
+    "company_dossier": {
+        "title_template": "Company Update: {topic}",
+        "subtitle_template": "Weekly developments · business, product, regulation, competition",
+        "icon": "🏢",
+        "subject_prefix": "🏢 Company Update:",
+        "alert_banner": {
+            "background": "#eef2ff",
+            "border_color": "#4338ca",
+            "text_color": "#312e81",
+            "icon": "🏢",
+            "label": "Company Weekly Update"
+        }
+    },
+    "market_dossier": {
+        "title_template": "Market Update: {topic}",
+        "subtitle_template": "New developments · regulation, capital flows, winners/losers",
+        "icon": "📊",
+        "subject_prefix": "📊 Market Update:",
+        "alert_banner": {
+            "background": "#ecfeff",
+            "border_color": "#0891b2",
+            "text_color": "#0f172a",
+            "icon": "📊",
+            "label": "Market Weekly Update"
+        }
+    },
+    "weekly_topic_overview": {
+        "title_template": "Topic Update: {topic}",
+        "subtitle_template": "New developments · policy, corporate, funding, research, disputes",
+        "icon": "🗂️",
+        "subject_prefix": "🗂️ Topic Update:",
+        "alert_banner": {
+            "background": "#f8fafc",
+            "border_color": "#0ea5e9",
+            "text_color": "#0f172a",
+            "icon": "🗂️",
+            "label": "Weekly Update"
+        }
+    },
     "news_monitoring": {
         "title_template": "News Monitoring: {topic}",
         "subtitle_template": "Ongoing coverage and updates",
@@ -451,8 +490,7 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
     Returns:
         Complete HTML email ready for Outlook
     """
-    return f'''</p>
-<!DOCTYPE html>
+    return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -501,7 +539,7 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
     </table>
 </body>
 </html>
-<p>'''
+'''
 
 
 # =============================================================================

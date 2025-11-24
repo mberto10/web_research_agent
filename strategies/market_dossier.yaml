@@ -1,0 +1,163 @@
+meta:
+  slug: market_dossier
+  version: 1
+  category: market
+  time_window: week
+  depth: deep
+
+queries:
+  parallel_objective: >
+    Erstelle einen wöchentlichen Markt-/Sektorüberblick zu {{sector_or_theme}} mit Fokus auf Treiber, Gewinner/Verlierer, Regulierung und Kapitalfluss.
+  parallel_queries: >
+    ["{{sector_or_theme}} weekly developments",
+     "{{sector_or_theme}} regulation update {{current_date}}",
+     "{{sector_or_theme}} funding venture capital deals",
+     "{{sector_or_theme}} major outages recalls",
+     "{{sector_or_theme}} incumbents challengers latest moves"]
+  sonar_prompt: "{{sector_or_theme}} letzte 7 Tage: Top Ereignisse, Regulatorik, Kapitalflüsse"
+
+tool_chain:
+  - use: parallel_search.call
+    name: parallel_market_primary
+    description: "Parallel-Suche für breite Ereigniserfassung im Sektor."
+    inputs:
+      objective: "{{parallel_objective}}"
+      search_queries: "{{parallel_queries}}"
+      mode: agentic
+      max_results: 12
+      excerpts: '{"max_chars_per_result": 4500}'
+      fetch_policy: '{"max_age_seconds": 604800}'
+    save_as: parallel_results
+
+  - name: sonar_cluster
+    description: "Autonome Sektor-Exploration mit semantischer Clusterung"
+    params:
+      max_results: 6
+      system_prompt: |
+        Du bist ein Research-Agent für den Sektor {{sector_or_theme}}.
+
+        DEIN AUFTRAG:
+        Exploriere die letzten 7 Tage im Sektor und clustere Ereignisse nach:
+        - Markttreiber und Disruptionen
+        - Gewinner und Verlierer (Momentum-Shifts)
+        - Regulatorische Entwicklungen
+        - Kapitalflüsse (Funding, M&A, Exits)
+
+        FORSCHUNGSSTRATEGIE:
+        - Navigiere den semantischen Raum des Sektors und identifiziere Ereignis-Cluster
+        - Erkunde verschiedene Akteurs-Typen: Incumbents, Challengers, Regulatoren, Investoren
+        - Folge Informations-Trails zwischen verwandten Events
+        - Wenn eine Dimension schwach ist (z.B. Regulierung), exploriere gezielt in diese Richtung
+        - Suche nach Verbindungen und Kausalitäten zwischen Events
+        - Priorisiere verschiedene Quellentypen: Behörden, Firmen-PR, Fachmedien, Investoren-Updates
+
+        QUALITÄTSKRITERIEN:
+        - Pro Cluster: Akteure, Ereignis, konkrete Zahlen/Zitate, Datum, primäre Quelle
+        - Identifiziere und markiere Informationslücken
+        - Bei Widersprüchen: Trianguliere mit zusätzlichen Quellen
+        - Bevorzuge Primärquellen über sekundäre Berichterstattung
+
+        OUTPUT je Fund:
+        Datum, Akteur/Institution, konkreter Claim/Zahl/Zitat, URL
+
+        Keine Meinungen; nur verifizierbare, zeitgestempelte Fakten.
+      search_mode: web
+      search_recency_filter: "{{search_recency_filter}}"
+      return_images: false
+      return_related_questions: false
+      temperature: 0.2
+      max_tokens: 1500
+    save_as: sonar_results
+
+  - name: sonar_gap_fill
+    description: "Selbstgesteuerter Markt-Scan mit semantischer Exploration"
+    when: "unique_sources < 8"
+    params:
+      max_results: 5
+      system_prompt: |
+        Du bist ein autonomer Research-Agent für den {{sector_or_theme}} Sektor.
+
+        ANALYSIERE die bisherige Evidenz und identifiziere was fehlt:
+        - Akteurs-Diversität: Sind nur Incumbents abgedeckt, aber keine Challengers?
+        - Thematische Lücken: Fehlt Regulierung, Kapitalfluss, oder technische Disruption?
+        - Geografische Balance: Nur US-fokussiert, oder auch EU/APAC?
+
+        FORSCHE SELBSTSTÄNDIG:
+        1. Navigiere den semantischen Raum des Sektors:
+           - Erkunde verschiedene Akteurs-Typen (Startups, Incumbents, Regulatoren, Investoren)
+           - Suche nach Events verschiedener Art (Deals, Produkt-Launches, Policy-Changes, Skandale)
+           - Folge Informations-Trails von einer Entdeckung zur nächsten
+
+        2. Fülle gezielt identifizierte Lücken:
+           - Wenn Kapitalfluss fehlt: Exploriere Funding-Announcements, M&A, IPOs, Down-Rounds
+           - Wenn Regulierung fehlt: Suche bei Behörden, Policy-Drafts, Hearings, Investigations
+           - Wenn Wettbewerb unklar: Analysiere Marktbewegungen, Positionierungen, strategische Shifts
+
+        3. Verwende multiple Perspektiven:
+           - Suche aus Sicht verschiedener Stakeholder (Investoren, Regulatoren, Kunden)
+           - Betrachte verschiedene Zeitskalen (Breaking News vs. strukturelle Trends)
+           - Beziehe internationale Märkte ein, nicht nur US
+
+        QUALITÄT:
+        - Priorisiere Primärquellen: Behörden-Announcements, Firmen-PR, EDGAR/SEDAR, EU Commission
+        - Jeder Fund braucht: Datum, Akteur, messbaren Claim/Zitat, URL
+        - Bei Widersprüchen: Trianguliere mit zusätzlichen Quellen
+
+        Nur verifizierbare Fakten der letzten 7 Tage.
+      search_mode: web
+      search_recency_filter: week
+      return_images: false
+      return_related_questions: false
+      temperature: 0.3
+      max_tokens: 1500
+    save_as: sonar_gap_results
+
+  - use: llm_analyzer.call
+    description: "Schreibe Wochenupdate zu Marktentwicklungen."
+    max_tokens: 4800
+    inputs:
+      prompt: |
+        Erstelle ein Wochenupdate mit den wichtigsten Entwicklungen im Sektor {{sector_or_theme}}.
+
+        Zeitraum: letzte 7 Tage
+        Sprache: Deutsch (alle Inhalte auf Deutsch verfassen; Abschnittstitel dürfen Englisch bleiben).
+        Evidenz:
+        {{evidence_text}}
+
+        Struktur (Überschriften auf Deutsch):
+        ## ZUSAMMENFASSUNG
+        2-3 Sätze zu den wichtigsten Bewegungen der Woche. Quellen inline: [Text](URL).
+
+        ## TOP-EREIGNISSE
+        - 5-7 wichtigste neue Entwicklungen (Datum, Akteur, was ist passiert) mit Quelle
+
+        ## REGULIERUNG / POLITIK
+        - Neue Maßnahmen, Anhörungen, Untersuchungen, Policy-Änderungen
+
+        ## KAPITAL & DEALS
+        - Neue Finanzierungen, M&A-Aktivitäten, Exits, Rückzüge
+
+        ## GEWINNER & VERLIERER
+        - Akteure mit positivem Momentum (2-3 mit Begründung)
+        - Akteure mit Gegenwind (2-3 mit Begründung)
+
+        ## AUSBLICK
+        - 2-3 Entwicklungen oder Fragen, die man nächste Woche beobachten sollte
+
+        Regeln:
+        - Fokus auf NEUE Entwicklungen der letzten 7 Tage
+        - Nur überprüfbare, zeitgestempelte Fakten
+        - Quellen IM Text verlinken: [Kurztext](vollständige-URL)
+        - Nicht selbst nummerieren, keine separate Quellenliste; die E-Mail-Vorlage rendert die Quellensammlung automatisch
+        - Keine Trennlinien einfügen
+    save_as: market_briefing
+    phase: finalize
+
+limits:
+  max_results: 20
+  max_llm_queries: 2
+
+finalize:
+  reactive: false
+  instructions: |
+    Falls Kapital- oder Regulierungsabschnitt leer bleibt, führe genau einen weiteren Sonar-Call mit recency=week aus.

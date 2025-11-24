@@ -10,3 +10,40 @@ strategies:
     required_variables:
       - name: topic
         description: Hauptthema für das Briefing.
+  - slug: company_dossier
+    title: Company Dossier
+    category: company
+    time_window: week
+    depth: deep
+    description: Journalistisches Dossier für eine bekannte Firma mit Produkten, Regulierung, Wettbewerb und Risiken.
+    priority: 12
+    fan_out: none
+    required_variables:
+      - name: company_name
+        description: Firmenname oder Marke.
+      - name: ticker
+        description: Börsenticker, falls vorhanden (optional).
+  - slug: market_dossier
+    title: Market/Sector Dossier
+    category: market
+    time_window: week
+    depth: deep
+    description: Wöchentlicher Sektor-Überblick mit Treibern, Gewinnern/Verlierern und regulatorischen Signalen.
+    priority: 14
+    fan_out: none
+    required_variables:
+      - name: sector_or_theme
+        description: Sektor oder Markt-Thema.
+      - name: region
+        description: Region oder Markt (optional).
+  - slug: weekly_topic_overview
+    title: Weekly Topic Overview
+    category: topic
+    time_window: week
+    depth: deep
+    description: Wochenüberblick zu einem bekannten Thema für Reporter mit klaren Story-Winkeln.
+    priority: 16
+    fan_out: none
+    required_variables:
+      - name: topic
+        description: Thema oder Nachrichtenstrang.

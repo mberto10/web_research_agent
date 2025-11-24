@@ -30,6 +30,9 @@ SETTINGS_PATH = ROOT / "config" / "settings.yaml"
 # Main strategies to migrate (per user requirements)
 MAIN_STRATEGIES = [
     "daily_news_briefing",
+    "company_dossier",
+    "market_dossier",
+    "weekly_topic_overview",
 ]
 
 

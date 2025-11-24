@@ -1,0 +1,156 @@
+meta:
+  slug: company_dossier
+  version: 1
+  category: company
+  time_window: week
+  depth: deep
+
+queries:
+  parallel_objective: >
+    Sammle bestätigte Entwicklungen der letzten 7 Tage zu {{company_name}}, mit Fokus auf Geschäft, Produkte, Regulierung, Wettbewerb und Risiken.
+    Bevorzuge zeitgestempelte, zitierfähige Fakten (Zahlen, Zitate, offizielle Mitteilungen).
+  parallel_queries: >
+    ["{{company_name}} latest developments last 7 days",
+     "{{company_name}} earnings guidance {{current_date}}",
+     "{{company_name}} product launch announcement",
+     "{{company_name}} regulatory filing investigation",
+     "{{company_name}} competitor response {{current_date}}"]
+  sonar_prompt: "{{company_name}} letzte 7 Tage: zeitgestempelte Fakten, Zitate, regulatorische Meldungen"
+
+tool_chain:
+  - use: parallel_search.call
+    name: parallel_company_primary
+    description: "Parallel-Suche für Kernquellen (Business, Produkt, Regulierung, Wettbewerb)."
+    inputs:
+      objective: "{{parallel_objective}}"
+      search_queries: "{{parallel_queries}}"
+      mode: agentic
+      max_results: 12
+      excerpts: '{"max_chars_per_result": 4500}'
+      fetch_policy: '{"max_age_seconds": 604800}'
+    save_as: parallel_results
+
+  - name: sonar_context_pass
+    description: "Autonome semantische Recherche mit Kontext-Exploration"
+    params:
+      max_results: 6
+      system_prompt: |
+        Du bist ein Research-Agent für {{company_name}}.
+
+        DEIN AUFTRAG:
+        Finde neue, zeitgestempelte Fakten der letzten 7 Tage zu:
+        - Finanzielle Entwicklungen (Earnings, Guidance, Umsatz, Margen)
+        - Produkt- und Roadmap-Updates (Launches, Features, Delays, Recalls)
+        - Regulatorische Ereignisse (Filings, Untersuchungen, Compliance)
+        - Wettbewerbssignale (Marktposition, Differentiation, Reaktionen)
+
+        FORSCHUNGSSTRATEGIE:
+        - Beginne mit dem Firmenkontext und erkunde semantisch verwandte Bereiche
+        - Wenn du auf ein Ereignis stößt, suche nach Primärquellen und Bestätigungen
+        - Folge Informationsspuren: Erwähnungen von Executives, Produktnamen, Filings
+        - Identifiziere Informationslücken in deinen Funden und fülle sie gezielt
+        - Wenn eine Facette unterrepräsentiert ist, exploriere aktiv in diese Richtung
+        - Priorisiere unterschiedliche Quellentypen: Behörden, Firmenseiten, Fachmedien, Finanzanalysten
+
+        QUALITÄTSKRITERIEN:
+        - Bevorzuge Primärquellen mit direkten Zitaten oder Zahlen
+        - Jeder Fund muss ein präzises Datum haben
+        - Vermeide redundante Informationen aus derselben Quelle
+        - Bei Widersprüchen: Suche nach der authorativsten Quelle zur Klärung
+
+        OUTPUT je Fund:
+        Datum, Akteur/Quelle, konkreter Claim/Zahl/Zitat, URL
+
+        Keine Spekulation - nur verifizierbare Fakten.
+      search_mode: web
+      search_recency_filter: "{{search_recency_filter}}"
+      return_images: false
+      return_related_questions: false
+      temperature: 0.2
+      max_tokens: 1500
+    save_as: sonar_results
+
+  - name: sonar_gap_fill
+    description: "Adaptive Lücken-Exploration"
+    when: "unique_sources < 8"
+    params:
+      max_results: 5
+      system_prompt: |
+        Du bist ein Research-Agent. Analysiere die bisherige Evidenz zu {{company_name}}
+        und identifiziere systematische Lücken.
+
+        DEINE AUFGABE:
+        1. Erkenne welche Facetten fehlen oder unterrepräsentiert sind:
+           - Wettbewerbskontext und Marktdynamik
+           - Regulatorische Entwicklungen und Legal-Themen
+           - Produkt-Pipeline und technische Entwicklungen
+
+        2. Exploriere gezielt die unterrepräsentierten Bereiche:
+           - Suche in verschiedenen Informationsräumen (Regulatoren, Fachpresse, internationale Quellen)
+           - Folge semantischen Verbindungen zu verwandten Konzepten
+           - Wenn du wenig findest: Erweitere auf adjacent topics (Branche, Konkurrenten, Technologie)
+
+        3. Verifiziere und trianguliere:
+           - Bei wichtigen Claims: Suche nach Bestätigung aus zweiter Quelle
+           - Bei vagen Informationen: Suche nach spezifischeren Details
+           - Priorisiere Quellen mit höherer Authorität
+
+        ADAPTIVE STRATEGIE:
+        - Falls Regulierung fehlt: Exploriere Behörden-Domänen und Filing-Datenbanken
+        - Falls Wettbewerb unklar: Suche nach Vergleichen, Marktanalysen, Analystenmeinungen
+        - Falls Produkt-Info spärlich: Suche nach Tech-Blogs, Entwickler-Communities, Beta-Releases
+
+        Gib pro Fund: Datum, Akteur, konkreter Claim/Zitat, URL (Primärquelle bevorzugen)
+
+        Nur verifizierbare Fakten der letzten 7 Tage.
+      search_mode: web
+      search_recency_filter: week
+      return_images: false
+      return_related_questions: false
+      temperature: 0.3
+      max_tokens: 1200
+    save_as: sonar_gap_results
+
+  - use: llm_analyzer.call
+    description: "Schreibe Wochenupdate zu Firmenentwicklungen mit Quellen."
+    max_tokens: 4800
+    inputs:
+      prompt: |
+        Erstelle ein Wochenupdate mit den neuesten Entwicklungen zu {{company_name}} ({{ticker}}).
+
+        Zeitraum: letzte 7 Tage
+        Sprache: Deutsch (alle Inhalte auf Deutsch verfassen; Abschnittstitel dürfen Englisch bleiben).
+        Evidenz:
+        {{evidence_text}}
+
+        Struktur (Überschriften auf Deutsch):
+        ## ZUSAMMENFASSUNG
+        2-3 Sätze zu den wichtigsten neuen Entwicklungen der Woche. Quellen inline: [Text](URL).
+
+        ## NEUE ENTWICKLUNGEN
+        - Business/Finanzen: Neue Zahlen, Guidance-Änderungen, Umsatz-Updates (mit Datum, Quelle)
+        - Produkt/Roadmap: Launches, Ankündigungen, Verzögerungen, Rückrufe (mit Datum, Quelle)
+        - Regulierung/Legal: Neue Filings, Untersuchungen, Urteile (mit Datum, Quelle)
+        - Wettbewerb: Relevante Konkurrenzbewegungen und Marktreaktionen (mit Datum, Quelle)
+
+        ## KONTEXT & AUSBLICK
+        - 2-3 Bulletpoints: Was bedeuten diese Entwicklungen? Worauf sollte man achten?
+
+        Regeln:
+        - Fokus auf NEUE Informationen der letzten 7 Tage, nicht auf bekannte Fakten
+        - Nur überprüfbare, zeitgestempelte Entwicklungen
+        - Quellen IM Text verlinken: [Kurztext](vollständige-URL)
+        - Nicht selbst nummerieren, keine separate Quellenliste; die E-Mail-Vorlage rendert die Quellensammlung automatisch
+        - Keine Trennlinien einfügen
+    save_as: dossier_content
+    phase: finalize
+
+limits:
+  max_results: 20
+  max_llm_queries: 2
+
+finalize:
+  reactive: false
+  instructions: |
+    Wenn wichtige Facetten fehlen (Wettbewerb, Regulierung, Produkt), füge genau EINEN weiteren Sonar-Call hinzu mit recency=week.
+    Keine doppelten Quellen verlinken, dedupliziere Domains.
