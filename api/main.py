@@ -592,6 +592,9 @@ async def run_batch_research(tasks: list, callback_url: str):
     logger.info(f"🎯 BACKGROUND TASK STARTED: Processing {len(tasks)} tasks")
     logger.info(f"{'='*60}\n")
 
+    # Default no-op so cleanup still runs if imports fail
+    flush_traces = lambda: None  # type: ignore[assignment]
+
     try:
         logger.info("📦 Importing research modules...")
         from core.graph import build_graph
@@ -829,6 +832,9 @@ async def run_manual_research(research_topic: str, callback_url: str, email: str
     logger.info(f"🎯 MANUAL RESEARCH STARTED")
     logger.info(f"   Topic: {research_topic}")
     logger.info(f"{'='*60}\n")
+
+    # Default no-op so cleanup still runs if imports fail
+    flush_traces = lambda: None  # type: ignore[assignment]
 
     try:
         logger.info("📦 Importing research modules...")
