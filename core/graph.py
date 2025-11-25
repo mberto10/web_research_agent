@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import threading
 from urllib.parse import urlparse, urlunparse
 from typing import Any, Dict, List, Optional
 
@@ -1902,14 +1903,26 @@ def _execute_use(use: str, inputs: Dict[str, Any]) -> Any:
     if fn is None:
         logger.error("Adapter '%s' has no callable for method '%s'", provider, method)
         return []
+
+    tool_name = f"{provider}.{method}"
+    start_time = time.time()
+
     try:
-        start_time = time.time()
         result = fn(**inputs) if isinstance(inputs, dict) else fn(inputs)
-        duration = time.time() - start_time
+        duration_ms = (time.time() - start_time) * 1000
 
         try:
             evs = _as_evidence_list(result)
-            logger.info(f"🔧 {provider}.{method}: Returned {len(evs)} results in {duration:.2f}s")
+            evidence_count = len(evs)
+            logger.info(f"🔧 {tool_name}: Returned {evidence_count} results in {duration_ms/1000:.2f}s")
+
+            # Record tool call result (thread-safe via lock)
+            collector = get_metrics_collector()
+            if collector:
+                _record_tool_call_threadsafe(
+                    collector, tool_name, success=True,
+                    evidence_count=evidence_count, duration_ms=duration_ms
+                )
         except Exception:
             pass
         return result
@@ -1917,13 +1930,61 @@ def _execute_use(use: str, inputs: Dict[str, Any]) -> Any:
         logger.debug("Attempting positional fallback for %s due to TypeError: %s", use, exc)
         # Try positional fallback
         try:
-            return fn(*inputs.values())  # type: ignore[arg-type]
+            result = fn(*inputs.values())  # type: ignore[arg-type]
+            duration_ms = (time.time() - start_time) * 1000
+            evs = _as_evidence_list(result)
+            collector = get_metrics_collector()
+            if collector:
+                _record_tool_call_threadsafe(
+                    collector, tool_name, success=True,
+                    evidence_count=len(evs), duration_ms=duration_ms
+                )
+            return result
         except Exception as inner_exc:
+            duration_ms = (time.time() - start_time) * 1000
             logger.exception("Failed fallback invocation for %s", use, exc_info=inner_exc)
+            collector = get_metrics_collector()
+            if collector:
+                _record_tool_call_threadsafe(
+                    collector, tool_name, success=False,
+                    error=str(inner_exc), duration_ms=duration_ms
+                )
             return []
     except Exception as exc:
+        duration_ms = (time.time() - start_time) * 1000
         logger.exception("Error executing use '%s'", use, exc_info=exc)
+        collector = get_metrics_collector()
+        if collector:
+            _record_tool_call_threadsafe(
+                collector, tool_name, success=False,
+                error=str(exc), duration_ms=duration_ms
+            )
         return []
+
+
+# Lock for thread-safe tool call recording
+_tool_call_lock = threading.Lock()
+
+
+def _record_tool_call_threadsafe(
+    collector,
+    tool_name: str,
+    success: bool,
+    evidence_count: int = 0,
+    error: Optional[str] = None,
+    duration_ms: float = 0.0,
+) -> None:
+    """Thread-safe wrapper for recording tool call results."""
+    with _tool_call_lock:
+        collector.record_tool_call(
+            tool_name=tool_name,
+            success=success,
+            evidence_count=evidence_count,
+            error=error,
+        )
+        # Manually set duration since we're not using start_tool_call
+        if collector._metrics.tool_calls:
+            collector._metrics.tool_calls[-1].duration_ms = duration_ms
 
 
 def _maybe_add_evidence(results: Any, bucket: List[Evidence]) -> None:

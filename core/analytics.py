@@ -5,10 +5,25 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Tool Call Result Tracking
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ToolCallResult:
+    """Result of a single tool call."""
+    tool_name: str
+    success: bool
+    evidence_count: int = 0
+    error: Optional[str] = None
+    duration_ms: float = 0.0
 
 
 @dataclass
@@ -51,6 +66,20 @@ class StrategyMetrics:
     sections_count: int = 0
     citations_count: int = 0
 
+    # ----- NEW: Efficiency metrics -----
+    evidence_before_dedup: int = 0  # Total evidence before deduplication
+    redundancy_ratio: float = 0.0   # Duplicate evidence ratio (0-1, lower is better)
+    cost_per_evidence: float = 0.0  # Tokens per evidence item (efficiency)
+
+    # ----- NEW: Quality proxy metrics -----
+    evidence_recency_score: float = 0.0  # % of sources within requested time window (0-1)
+    query_coverage_score: float = 0.0    # How well evidence covers the tasks (0-1)
+    tool_success_rate: float = 0.0       # % of tool calls that returned results (0-1)
+    avg_evidence_per_tool_call: float = 0.0  # Average evidence items per successful call
+
+    # ----- NEW: Tool call tracking -----
+    tool_calls: List[ToolCallResult] = field(default_factory=list)
+
     @property
     def total_duration_ms(self) -> float:
         return (
@@ -89,8 +118,8 @@ class MetricsCollector:
         collector.end_phase("scope", token_usage=150)
 
         collector.start_phase("research")
-        collector.record_api_call("sonar")
-        collector.record_api_call("exa")
+        collector.record_tool_call("sonar", success=True, evidence_count=5)
+        collector.record_tool_call("exa", success=True, evidence_count=3)
         # ... research execution ...
         collector.end_phase("research", token_usage=500)
 
@@ -102,11 +131,23 @@ class MetricsCollector:
         self.strategy_slug = strategy_slug
         self._metrics = StrategyMetrics(strategy_slug=strategy_slug)
         self._current_phase: Optional[str] = None
+        self._tool_call_start: Optional[float] = None
+        self._evidence_before_dedup: int = 0
+        self._time_window: Optional[str] = None
+        self._tasks: List[str] = []
 
     def set_strategy_slug(self, slug: str) -> None:
         """Update the strategy slug (called when determined during scope)."""
         self.strategy_slug = slug
         self._metrics.strategy_slug = slug
+
+    def set_time_window(self, time_window: str) -> None:
+        """Set the requested time window for recency scoring."""
+        self._time_window = time_window
+
+    def set_tasks(self, tasks: List[str]) -> None:
+        """Set the research tasks for coverage scoring."""
+        self._tasks = tasks
 
     def start_phase(self, phase: str) -> None:
         """Mark the start of a phase."""
@@ -123,8 +164,48 @@ class MetricsCollector:
             phase_metrics.token_usage = token_usage
         self._current_phase = None
 
+    def start_tool_call(self) -> None:
+        """Mark the start of a tool call for duration tracking."""
+        self._tool_call_start = time.time()
+
+    def record_tool_call(
+        self,
+        tool_name: str,
+        success: bool,
+        evidence_count: int = 0,
+        error: Optional[str] = None,
+        phase: Optional[str] = None,
+    ) -> None:
+        """Record a tool call result with detailed metrics."""
+        target_phase = phase or self._current_phase
+
+        # Calculate duration if we have a start time
+        duration_ms = 0.0
+        if self._tool_call_start:
+            duration_ms = (time.time() - self._tool_call_start) * 1000
+            self._tool_call_start = None
+
+        # Record detailed tool call result
+        self._metrics.tool_calls.append(ToolCallResult(
+            tool_name=tool_name,
+            success=success,
+            evidence_count=evidence_count,
+            error=error,
+            duration_ms=duration_ms,
+        ))
+
+        # Also update the legacy api_calls counter for backwards compatibility
+        if target_phase:
+            phase_metrics = getattr(self._metrics, target_phase, None)
+            if phase_metrics:
+                phase_metrics.api_calls[tool_name] = phase_metrics.api_calls.get(tool_name, 0) + 1
+
+        # Track evidence before dedup
+        if success:
+            self._evidence_before_dedup += evidence_count
+
     def record_api_call(self, tool_name: str, phase: Optional[str] = None) -> None:
-        """Record an API call to a tool."""
+        """Record an API call to a tool (legacy method, prefer record_tool_call)."""
         target_phase = phase or self._current_phase
         if target_phase:
             phase_metrics = getattr(self._metrics, target_phase, None)
@@ -140,6 +221,8 @@ class MetricsCollector:
         evidence = getattr(state, 'evidence', []) or []
         sections = getattr(state, 'sections', []) or []
         citations = getattr(state, 'citations', []) or []
+        tasks = getattr(state, 'tasks', []) or self._tasks
+        time_window = getattr(state, 'time_window', None) or self._time_window
 
         # Evidence metrics
         self._metrics.evidence_count = len(evidence)
@@ -172,6 +255,60 @@ class MetricsCollector:
 
         # Compute diversity score
         self._metrics.source_diversity_score = compute_source_diversity(evidence)
+
+        # ----- NEW: Efficiency metrics -----
+        # Evidence before dedup (from tool call tracking, or estimate from tool calls)
+        if self._evidence_before_dedup > 0:
+            self._metrics.evidence_before_dedup = self._evidence_before_dedup
+        else:
+            # Estimate from tool calls if we have detailed tracking
+            self._metrics.evidence_before_dedup = sum(
+                tc.evidence_count for tc in self._metrics.tool_calls
+            ) or len(evidence)
+
+        # Redundancy ratio: how much duplicate evidence was there?
+        if self._metrics.evidence_before_dedup > 0:
+            dedup_removed = self._metrics.evidence_before_dedup - len(evidence)
+            self._metrics.redundancy_ratio = round(
+                dedup_removed / self._metrics.evidence_before_dedup, 3
+            )
+
+        # Cost per evidence: tokens spent per evidence item
+        total_tokens = self._metrics.total_tokens
+        if len(evidence) > 0 and total_tokens > 0:
+            self._metrics.cost_per_evidence = round(total_tokens / len(evidence), 2)
+
+        # ----- NEW: Quality proxy metrics -----
+        # Evidence recency score
+        self._metrics.evidence_recency_score = compute_evidence_recency(
+            evidence, time_window
+        )
+
+        # Query/task coverage score
+        self._metrics.query_coverage_score = compute_query_coverage(evidence, tasks)
+
+        # Tool success rate and avg evidence per call
+        if self._metrics.tool_calls:
+            successful_calls = [tc for tc in self._metrics.tool_calls if tc.success]
+            total_calls = len(self._metrics.tool_calls)
+            self._metrics.tool_success_rate = round(
+                len(successful_calls) / total_calls, 3
+            ) if total_calls > 0 else 0.0
+
+            if successful_calls:
+                total_evidence_from_calls = sum(tc.evidence_count for tc in successful_calls)
+                self._metrics.avg_evidence_per_tool_call = round(
+                    total_evidence_from_calls / len(successful_calls), 2
+                )
+        else:
+            # Fallback: estimate from api_calls counter
+            total_api_calls = sum(self._metrics.total_api_calls.values())
+            if total_api_calls > 0:
+                # Assume all calls succeeded if we don't have detailed tracking
+                self._metrics.tool_success_rate = 1.0
+                self._metrics.avg_evidence_per_tool_call = round(
+                    len(evidence) / total_api_calls, 2
+                )
 
         return self._metrics
 
@@ -214,6 +351,208 @@ def compute_source_diversity(evidence: List[Any]) -> float:
     count_score = min(unique_domains / 10, 1.0)
 
     return round((ratio_score * 0.5) + (count_score * 0.5), 3)
+
+
+def compute_evidence_recency(
+    evidence: List[Any],
+    time_window: Optional[str],
+) -> float:
+    """Compute what percentage of evidence falls within the requested time window.
+
+    Args:
+        evidence: List of evidence items with optional 'date' field
+        time_window: Requested time window (e.g., "last 24 hours", "last week")
+
+    Returns:
+        0.0 to 1.0 - proportion of dated evidence within the time window
+    """
+    if not evidence:
+        return 0.0
+
+    # Parse time window to get the cutoff date
+    cutoff_date = _parse_time_window_cutoff(time_window)
+    if cutoff_date is None:
+        # Can't determine recency without a time window, assume all are recent
+        return 1.0
+
+    dated_count = 0
+    recent_count = 0
+
+    for ev in evidence:
+        date_str = getattr(ev, 'date', None)
+        if not date_str:
+            continue
+
+        dated_count += 1
+        ev_date = _parse_evidence_date(date_str)
+        if ev_date and ev_date >= cutoff_date:
+            recent_count += 1
+
+    if dated_count == 0:
+        # No dated evidence - can't compute recency
+        return 0.5  # Neutral score
+
+    return round(recent_count / dated_count, 3)
+
+
+def _parse_time_window_cutoff(time_window: Optional[str]) -> Optional[datetime]:
+    """Parse a time window string and return the cutoff datetime.
+
+    Supports formats like:
+    - "last 24 hours", "last 48 hours"
+    - "last day", "last week", "last month"
+    - "daily", "weekly", "monthly"
+    """
+    if not time_window:
+        return None
+
+    now = datetime.now()
+    tw = time_window.lower().strip()
+
+    # Handle "last X hours"
+    if "hour" in tw:
+        import re
+        match = re.search(r'(\d+)\s*hour', tw)
+        if match:
+            hours = int(match.group(1))
+            return now - timedelta(hours=hours)
+
+    # Handle common time windows
+    window_map = {
+        "daily": timedelta(days=1),
+        "day": timedelta(days=1),
+        "last day": timedelta(days=1),
+        "last 24 hours": timedelta(hours=24),
+        "last 48 hours": timedelta(hours=48),
+        "weekly": timedelta(weeks=1),
+        "week": timedelta(weeks=1),
+        "last week": timedelta(weeks=1),
+        "monthly": timedelta(days=30),
+        "month": timedelta(days=30),
+        "last month": timedelta(days=30),
+        "quarterly": timedelta(days=90),
+        "last quarter": timedelta(days=90),
+    }
+
+    for pattern, delta in window_map.items():
+        if pattern in tw:
+            return now - delta
+
+    # Default: last 24 hours
+    return now - timedelta(hours=24)
+
+
+def _parse_evidence_date(date_str: str) -> Optional[datetime]:
+    """Parse a date string from evidence into a datetime.
+
+    Handles various formats commonly seen in search results.
+    """
+    if not date_str:
+        return None
+
+    # Common date formats to try
+    formats = [
+        "%Y-%m-%d",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%dT%H:%M:%S.%fZ",
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%B %d, %Y",  # "January 15, 2024"
+        "%b %d, %Y",  # "Jan 15, 2024"
+        "%d %B %Y",   # "15 January 2024"
+        "%d %b %Y",   # "15 Jan 2024"
+        "%m/%d/%Y",
+        "%d/%m/%Y",
+    ]
+
+    # Clean up common issues
+    date_str = date_str.strip()
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+
+    # Try dateutil as fallback if available
+    try:
+        from dateutil import parser as date_parser
+        return date_parser.parse(date_str, fuzzy=True)
+    except Exception:
+        pass
+
+    return None
+
+
+def compute_query_coverage(
+    evidence: List[Any],
+    tasks: List[str],
+) -> float:
+    """Compute how well the evidence covers the research tasks/queries.
+
+    Uses simple keyword matching to estimate coverage. Each task is considered
+    "covered" if at least one evidence item's title or snippet contains
+    significant words from the task.
+
+    Args:
+        evidence: List of evidence items
+        tasks: List of research tasks/queries
+
+    Returns:
+        0.0 to 1.0 - proportion of tasks with matching evidence
+    """
+    if not tasks:
+        return 1.0  # No tasks = nothing to cover
+    if not evidence:
+        return 0.0
+
+    # Extract keywords from tasks (skip common stop words)
+    stop_words = {
+        'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+        'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'be', 'been',
+        'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+        'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need',
+        'about', 'into', 'through', 'during', 'before', 'after', 'above',
+        'below', 'between', 'under', 'again', 'further', 'then', 'once',
+        'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those',
+        'am', 'it', 'its', 'as', 'if', 'each', 'how', 'when', 'where', 'why',
+        'all', 'both', 'any', 'some', 'no', 'not', 'only', 'same', 'so',
+        'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there',
+        'news', 'latest', 'recent', 'update', 'updates', 'today',
+    }
+
+    def extract_keywords(text: str) -> set:
+        """Extract meaningful keywords from text."""
+        if not text:
+            return set()
+        # Simple tokenization - split on non-alphanumeric
+        import re
+        words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
+        return {w for w in words if w not in stop_words}
+
+    # Build evidence text corpus
+    evidence_keywords: set = set()
+    for ev in evidence:
+        title = getattr(ev, 'title', '') or ''
+        snippet = getattr(ev, 'snippet', '') or ''
+        evidence_keywords.update(extract_keywords(title))
+        evidence_keywords.update(extract_keywords(snippet))
+
+    # Check coverage for each task
+    covered_tasks = 0
+    for task in tasks:
+        task_keywords = extract_keywords(task)
+        if not task_keywords:
+            covered_tasks += 1  # Empty task counts as covered
+            continue
+
+        # Task is covered if at least 30% of its keywords appear in evidence
+        matching = task_keywords & evidence_keywords
+        coverage_ratio = len(matching) / len(task_keywords)
+        if coverage_ratio >= 0.3:
+            covered_tasks += 1
+
+    return round(covered_tasks / len(tasks), 3)
 
 
 def record_strategy_scores(trace_id: str, metrics: StrategyMetrics) -> bool:
@@ -261,6 +600,17 @@ def record_strategy_scores(trace_id: str, metrics: StrategyMetrics) -> bool:
             # Output metrics
             ("sections_count", metrics.sections_count, "Number of report sections"),
             ("citations_count", metrics.citations_count, "Number of citations"),
+
+            # ----- NEW: Efficiency metrics -----
+            ("evidence_before_dedup", metrics.evidence_before_dedup, "Evidence count before deduplication"),
+            ("redundancy_ratio", metrics.redundancy_ratio, "Duplicate evidence ratio (0-1, lower is better)"),
+            ("cost_per_evidence", metrics.cost_per_evidence, "Tokens per evidence item"),
+
+            # ----- NEW: Quality proxy metrics -----
+            ("evidence_recency", metrics.evidence_recency_score, "% of sources within time window (0-1)"),
+            ("query_coverage", metrics.query_coverage_score, "How well evidence covers tasks (0-1)"),
+            ("tool_success_rate", metrics.tool_success_rate, "% of tool calls returning results (0-1)"),
+            ("avg_evidence_per_call", metrics.avg_evidence_per_tool_call, "Avg evidence items per tool call"),
         ]
 
         # Record numeric scores
@@ -340,10 +690,13 @@ def set_metrics_collector(collector: Optional[MetricsCollector]) -> None:
 
 
 __all__ = [
+    "ToolCallResult",
     "PhaseMetrics",
     "StrategyMetrics",
     "MetricsCollector",
     "compute_source_diversity",
+    "compute_evidence_recency",
+    "compute_query_coverage",
     "record_strategy_scores",
     "get_metrics_collector",
     "set_metrics_collector",
