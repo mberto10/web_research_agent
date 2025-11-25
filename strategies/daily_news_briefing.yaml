@@ -1,27 +1,45 @@
 meta:
   slug: daily_news_briefing
-  version: 1
+  version: 2
   category: news
   time_window: day
   depth: deep
 
 queries:
+  # Multi-language search for comprehensive coverage
   parallel_objective: >
-    Liefere die verlässlichsten Entwicklungen zu {{topic}} aus den vergangenen 24 Stunden.
-    Priorisiere konkrete Fakten (Daten, Zahlen, Zitate von Führungskräften) und stelle sicher,
-    dass jeder Punkt mit Quellenangaben für ein investorenorientiertes Briefing belegt ist.
-  parallel_queries: "[\"{{topic}} aktuelle Nachrichten {{current_date}}\",\"{{topic}} Entwicklungen letzte 24 Stunden\",\"{{topic}} Ausblick kommende 24 Stunden\"]"
-  sonar_prompt: "{{topic}} letzte 24h faktenbasiert: Zeitstempel, Akteur, Maßzahl/Zitat, Quelle"
+    Find the most reliable developments on {{topic}} from the past 24 hours.
+    Prioritize primary sources (official statements, wire services, government releases).
+    Include concrete facts: timestamps, actors, quotes, metrics.
+    Search in both German and English for comprehensive coverage.
+  parallel_queries: "[\"{{topic}} official statement {{current_date}}\",\"{{topic}} offizielle Stellungnahme {{current_date}}\",\"{{topic}} Reuters AP AFP dpa {{current_date}}\",\"{{topic}} breaking news last 24 hours\",\"{{topic}} aktuelle Entwicklungen heute\"]"
+
+  # Sonar prompts for targeted searches
+  sonar_primary: |
+    Find ONLY primary sources for {{topic}} from the last 24 hours:
+    - Government/official statements
+    - Press releases
+    - Wire service reports (Reuters, AP, AFP, dpa)
+    - Court filings or regulatory documents
+    Format each finding: Timestamp | Actor | Quote/Fact | Source URL
+    Prioritize .gov domains and official sources.
+
+  sonar_analysis: |
+    Find expert analysis on {{topic}} from the last 24h:
+    - Think tank analysis
+    - Expert commentary
+    - Financial analyst notes
+    Distinguish fact from opinion. Note source credibility.
 
 tool_chain:
   - use: parallel_search.call
     name: parallel_primary
-    description: "Parallel-Agentenrecherche für dichte Evidenz"
+    description: "Multi-language parallel search for comprehensive coverage"
     inputs:
       objective: "{{parallel_objective}}"
       search_queries: "{{parallel_queries}}"
       mode: agentic
-      max_results: 8
+      max_results: 10
       excerpts: '{"max_chars_per_result": 4500}'
       fetch_policy: '{"max_age_seconds": 21600}'
     save_as: parallel_results
@@ -29,11 +47,7 @@ tool_chain:
   - name: sonar_pulse
     params:
       max_results: 6
-      system_prompt: |
-        Sammle faktenbasierte Updates der letzten 24h zu {{topic}}.
-        Format pro Fund: Datum/Uhrzeit, Akteur, konkrete Aussage/zahl, Quelle.
-        Bevorzuge Primärquellen (Offizielle Statements, Behörden, Firmenblogs) vor Zweitberichten.
-        Keine Spekulationen oder Meinungen; nur verifizierbare Claims mit URL.
+      system_prompt: "{{sonar_primary}}"
       search_mode: web
       search_recency_filter: "{{search_recency_filter}}"
       return_images: false
@@ -43,15 +57,11 @@ tool_chain:
     save_as: sonar_results
 
   - name: sonar_gap_fill
-    description: "Optionaler Zusatzaufruf, wenn neue Blickwinkel oder Bestätigungen fehlen"
+    description: "Optional call for expert analysis if primary sources are thin"
     when: "{{needs_gap_fill}}"
     params:
       max_results: 4
-      system_prompt: |
-        Fülle fehlende Blickwinkel zu {{topic}}:
-        - Suche nach widersprechenden oder bestätigenden Fakten der letzten 24h.
-        - Ziehe alternative Regionen/Sprachen in Betracht, aber bleibe bei Primärquellen.
-        Gib je Fund: Zeitstempel, Akteur, Fakt/Zitat, URL.
+      system_prompt: "{{sonar_analysis}}"
       search_mode: web
       search_recency_filter: day
       return_images: false
@@ -61,101 +71,100 @@ tool_chain:
     save_as: sonar_gap_results
 
   - use: llm_analyzer.call
-    description: "Verfasse optimiertes Briefing"
+    description: "Generate professional daily briefing"
     max_tokens: 4500
     inputs:
       prompt: |
-        Erstelle ein umfassendes tägliches Nachrichtenbriefing auf Basis der gesammelten Evidenz.
+        Erstelle ein professionelles Tages-Briefing für Journalisten und Analysten.
 
         Thema: {{topic}}
-        Aktuelles Datum: {{current_date}}
-        Sprache: Deutsch (bitte alle Inhalte auf Deutsch verfassen; Abschnittstitel können Englisch bleiben).
+        Datum: {{current_date}}
+        Sprache: Deutsch
 
         Forschungsevidenz:
         {{evidence_text}}
 
-        Halte dich exakt an diese Struktur:
+        EXAKTE STRUKTUR (strikt einhalten):
 
-        ## KURZÜBERBLICK
-        2-3 Sätze zu den wichtigsten Entwicklungen. Quellen NUR als Nummern: [1], [2] etc. Keine Bulletpoints.
+        ## TOP STORY
 
-        ## EILMELDUNGEN
-        • vor X Stunden — Kurze Beschreibung der Entwicklung [1].
-        • vor X Stunden — Weitere Entwicklung [2].
-        (Nutze • statt - für Aufzählungen)
+        **[Prägnante Schlagzeile der wichtigsten Entwicklung]**
 
-        ## WICHTIGE ENTWICKLUNGEN
+        2-3 Sätze zum wichtigsten Ereignis des Tages. Konkrete Fakten, Zahlen, Zitate. Quellen als [1], [2] am Satzende.
 
-        ### Überschrift des ersten Themas
-        2-3 Sätze Fließtext mit konkreten Fakten. Quellen als Nummern [1], [2] am Satzende.
+        ## BREAKING
 
-        ### Überschrift des zweiten Themas
-        2-3 Sätze Fließtext. Quellen als Nummern [3], [4] am Satzende.
+        • Vor Xh — Kurze Beschreibung der zeitkritischen Entwicklung [N]
+        • Vor Xh — Weitere aktuelle Meldung [N]
 
-        (Erstelle 3-5 solcher Unterabschnitte)
+        (Nur Meldungen der letzten 6 Stunden. Abschnitt weglassen wenn keine aktuellen Meldungen.)
 
-        ## ANALYSE NACH THEMA
+        ## WHAT'S HAPPENING
 
-        ### Themenname
-        **Fazit:** Ein Satz Zusammenfassung.
-        - Kernpunkt eins mit Quellenangabe [5].
-        - Kernpunkt zwei mit Quellenangabe [6].
+        ### Thema 1
+        Ein Absatz (40-50 Wörter) zu diesem Themenbereich. Konkrete Fakten mit Quellenangaben [N][N].
 
-        ### Weiteres Thema
-        **Fazit:** Ein Satz Zusammenfassung.
-        - Kernpunkt mit Quelle [7].
+        ### Thema 2
+        Ein Absatz (40-50 Wörter) zu diesem Themenbereich. Fakten und Entwicklungen [N].
 
-        ## WEITERE NENNUNGEN
-        • Kurzer Hinweis auf weitere relevante Entwicklung [8].
-        • Weiterer Punkt [9].
+        ### Thema 3
+        Ein Absatz (40-50 Wörter) zu diesem Themenbereich [N][N].
 
-        WICHTIGE FORMATIERUNGSREGELN:
-        1. Quellen IMMER nur als Nummern [1], [2], [3] etc. - NIEMALS Quellennamen im Text
-        2. Nach jeder ## Hauptüberschrift eine Leerzeile, dann Inhalt
-        3. ### Unterüberschriften für Unterpunkte verwenden
-        4. Bulletpoints nur in EILMELDUNGEN, ANALYSE (unter Fazit) und WEITERE NENNUNGEN
-        5. KEINE horizontalen Linien (---) einfügen
-        6. KEINE separate Quellensammlung am Ende - Quellen werden automatisch generiert
-        7. Text endet nach ## WEITERE NENNUNGEN
+        (Erstelle 3-5 thematische Abschnitte basierend auf der Evidenz)
+
+        ## BOTTOM LINE
+
+        Ein Satz: Die zentrale Erkenntnis des Tages für Entscheidungsträger.
+
+        STRIKTE REGELN:
+        1. Quellen AUSSCHLIESSLICH als Nummern [1], [2], [3] — NIEMALS Quellennamen im Text
+        2. Keine horizontalen Linien (---)
+        3. Keine Quellensammlung am Ende — wird automatisch generiert
+        4. Maximal 400 Wörter Gesamtlänge
+        5. Jeder Fakt muss eine Quellenangabe haben
+        6. Text endet nach ## BOTTOM LINE
+        7. Überschriften auf Englisch (TOP STORY, BREAKING, WHAT'S HAPPENING, BOTTOM LINE)
+        8. Inhalt auf Deutsch
     save_as: briefing_content
     phase: finalize
 
 limits:
-  max_results: 18
+  max_results: 20
   max_llm_queries: 2
 
 finalize:
   reactive: false
   instructions: |
-    Du schreibst ein tägliches Nachrichtenbriefing für {{topic}}.
+    Du erstellst ein professionelles Tages-Briefing für {{topic}}.
 
-    1. Prüfe die Aktualität der Evidenz. Ist kein Parallel-Ergebnis jünger als 6 Stunden, rufe parallel_search erneut mit fetch_policy {"max_age_seconds":7200} auf.
-    2. Bei widersprüchlichen Fakten führe sonar_call("{{topic}} verifizierte Fakten Zeitstrahl heute", search_recency_filter="day") aus.
-    3. Maximal EIN zusätzlicher Tool-Aufruf zur Nachbesserung.
+    QUALITÄTSPRÜFUNG:
+    1. Ist die Evidenz aktuell? Falls kein Ergebnis jünger als 6h, führe parallel_search mit fetch_policy {"max_age_seconds":7200} aus.
+    2. Gibt es widersprüchliche Fakten? Dann sonar_call zur Verifizierung.
+    3. Maximal EIN zusätzlicher Tool-Aufruf.
 
-    STRUKTUR (strikt einhalten):
-    ## KURZÜBERBLICK
-    2-3 Sätze Fließtext. Quellen nur als [1], [2] etc.
+    STRUKTUR (exakt einhalten):
 
-    ## EILMELDUNGEN
-    • vor X Stunden — Beschreibung [1].
+    ## TOP STORY
+    **[Schlagzeile]**
+    2-3 Sätze mit [N] Quellen.
 
-    ## WICHTIGE ENTWICKLUNGEN
+    ## BREAKING
+    • Vor Xh — Meldung [N]
+    (Nur wenn Meldungen < 6h alt. Sonst weglassen.)
+
+    ## WHAT'S HAPPENING
     ### Thema 1
-    Fließtext mit Quellen [2], [3].
+    Absatz mit [N][N].
     ### Thema 2
-    Fließtext mit Quellen [4].
+    Absatz mit [N].
+    (3-5 Themen)
 
-    ## ANALYSE NACH THEMA
-    ### Themenname
-    **Fazit:** Zusammenfassung.
-    - Punkt mit [5].
-
-    ## WEITERE NENNUNGEN
-    • Hinweis [6].
+    ## BOTTOM LINE
+    Ein Satz Fazit.
 
     REGELN:
-    - Quellen NUR als Nummern [1], [2] - NIEMALS Quellennamen wie "Tagesschau" im Text
-    - KEINE horizontalen Linien (---)
-    - KEINE separate Quellensammlung am Ende
-    - Text endet nach ## WEITERE NENNUNGEN
+    - Quellen NUR als [1], [2] — NIEMALS "Tagesschau", "ZDF" etc. im Text
+    - KEINE horizontalen Linien
+    - KEINE Quellensammlung am Ende
+    - Text endet nach BOTTOM LINE
+    - Überschriften Englisch, Inhalt Deutsch

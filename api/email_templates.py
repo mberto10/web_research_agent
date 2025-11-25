@@ -1,14 +1,42 @@
 """
 Email Template Engine for Research Agent API.
 
-Generates complete, professional HTML newsletter emails with strategy-specific styling.
-Power Automate can directly insert the body field into Outlook without additional processing.
+Generates professional HTML newsletter emails with FAZ-inspired typography and styling.
+Optimized for Outlook compatibility via Power Automate.
+
+Design System:
+- Primary: #110a35 (deep navy)
+- Secondary: #e8edee (light gray)
+- Accent: #967d28 (gold)
+- Typography: Georgia/serif for headlines, system sans-serif for body
 """
 
 import re
 from datetime import datetime
 from typing import Optional
 import markdown2
+
+
+# =============================================================================
+# DESIGN TOKENS (FAZ-inspired)
+# =============================================================================
+
+COLORS = {
+    "primary": "#110a35",      # Deep navy - headings, emphasis
+    "secondary": "#e8edee",    # Light gray - backgrounds
+    "accent": "#967d28",       # Gold - highlights, section markers
+    "text": "#374151",         # Body text
+    "text_light": "#6b7280",   # Secondary text, timestamps
+    "background": "#f8fafc",   # Page background
+    "white": "#ffffff",        # Content background
+    "border": "#e5e7eb",       # Subtle borders
+    "warning_bg": "#fefce8",   # AI notice background
+    "warning_border": "#ca8a04", # AI notice border
+    "warning_text": "#713f12", # AI notice text
+}
+
+# Logo - hosted version (globe with quill)
+LOGO_URL = "https://webresearchagent.replit.app/static/logo.png"
 
 
 # =============================================================================
@@ -19,137 +47,52 @@ STRATEGY_TEMPLATES = {
     "news/real_time_briefing": {
         "title_template": "Breaking: {topic}",
         "subtitle_template": "Live updates as of {time}",
-        "icon": "🔴",
-        "subject_prefix": "🔴 Breaking News:",
-        "alert_banner": {
-            "background": "#fef3c7",
-            "border_color": "#f59e0b",
-            "text_color": "#78350f",
-            "icon": "⚡",
-            "label": "BREAKING NEWS ALERT"
-        }
+        "subject_prefix": "Breaking News:",
+        "show_breaking_badge": True
     },
     "company/dossier": {
         "title_template": "Company Dossier: {topic}",
-        "subtitle_template": "Comprehensive company analysis and profile",
-        "icon": "🏢",
-        "subject_prefix": "🏢 Company Report:",
-        "alert_banner": {
-            "background": "#e0e7ff",
-            "border_color": "#667eea",
-            "text_color": "#3730a3",
-            "icon": "🏢",
-            "label": "Company Research Report"
-        }
+        "subtitle_template": "Comprehensive company analysis",
+        "subject_prefix": "Company Report:",
+        "show_breaking_badge": False
     },
     "financial_research": {
         "title_template": "Financial Research: {topic}",
-        "subtitle_template": "Market analysis and investment insights",
-        "icon": "📈",
-        "subject_prefix": "📈 Financial Analysis:",
-        "alert_banner": {
-            "background": "#dcfce7",
-            "border_color": "#16a34a",
-            "text_color": "#14532d",
-            "icon": "📈",
-            "label": "Financial Market Analysis"
-        }
+        "subtitle_template": "Market analysis and insights",
+        "subject_prefix": "Financial Analysis:",
+        "show_breaking_badge": False
     },
-    "financial_news_reactive": {
-        "title_template": "Market Alert: {topic}",
-        "subtitle_template": "Rapid response to financial developments",
-        "icon": "💹",
-        "subject_prefix": "💹 Market Alert:",
-        "alert_banner": {
-            "background": "#fee2e2",
-            "border_color": "#dc2626",
-            "text_color": "#7f1d1d",
-            "icon": "📊",
-            "label": "Market Alert"
-        }
+    "daily_news_briefing": {
+        "title_template": "Daily Briefing",
+        "subtitle_template": "{topic}",
+        "subject_prefix": "Daily Briefing:",
+        "show_breaking_badge": False
     },
-    "research_paper_analysis": {
-        "title_template": "Research Analysis: {topic}",
-        "subtitle_template": "Academic literature review and synthesis",
-        "icon": "🎓",
-        "subject_prefix": "🎓 Research Analysis:",
-        "alert_banner": {
-            "background": "#f3e8ff",
-            "border_color": "#9333ea",
-            "text_color": "#581c87",
-            "icon": "🎓",
-            "label": "Academic Research Analysis"
-        }
-    },
-    "general/week_overview": {
+    "weekly_topic_overview": {
         "title_template": "Weekly Overview: {topic}",
-        "subtitle_template": "Your comprehensive week in review",
-        "icon": "📅",
-        "subject_prefix": "📅 Weekly Overview:",
-        "alert_banner": None
+        "subtitle_template": "Key developments this week",
+        "subject_prefix": "Weekly Overview:",
+        "show_breaking_badge": False
     },
     "company_dossier": {
         "title_template": "Company Update: {topic}",
-        "subtitle_template": "Weekly developments · business, product, regulation, competition",
-        "icon": "🏢",
-        "subject_prefix": "🏢 Company Update:",
-        "alert_banner": {
-            "background": "#eef2ff",
-            "border_color": "#4338ca",
-            "text_color": "#312e81",
-            "icon": "🏢",
-            "label": "Company Weekly Update"
-        }
+        "subtitle_template": "Weekly developments",
+        "subject_prefix": "Company Update:",
+        "show_breaking_badge": False
     },
     "market_dossier": {
         "title_template": "Market Update: {topic}",
-        "subtitle_template": "New developments · regulation, capital flows, winners/losers",
-        "icon": "📊",
-        "subject_prefix": "📊 Market Update:",
-        "alert_banner": {
-            "background": "#ecfeff",
-            "border_color": "#0891b2",
-            "text_color": "#0f172a",
-            "icon": "📊",
-            "label": "Market Weekly Update"
-        }
+        "subtitle_template": "Market developments",
+        "subject_prefix": "Market Update:",
+        "show_breaking_badge": False
     },
-    "weekly_topic_overview": {
-        "title_template": "Topic Update: {topic}",
-        "subtitle_template": "New developments · policy, corporate, funding, research, disputes",
-        "icon": "🗂️",
-        "subject_prefix": "🗂️ Topic Update:",
-        "alert_banner": {
-            "background": "#f8fafc",
-            "border_color": "#0ea5e9",
-            "text_color": "#0f172a",
-            "icon": "🗂️",
-            "label": "Weekly Update"
-        }
-    },
-    "news_monitoring": {
-        "title_template": "News Monitoring: {topic}",
-        "subtitle_template": "Ongoing coverage and updates",
-        "icon": "📊",
-        "subject_prefix": "📊 News Update:",
-        "alert_banner": None
-    },
-    "daily_news_briefing": {
-        "title_template": "Daily News Briefing: {topic}",
-        "subtitle_template": "{date}",
-        "icon": "📰",
-        "subject_prefix": "📰 Daily Briefing:",
-        "alert_banner": None
-    }
 }
 
-# Default template for unknown strategies
 DEFAULT_TEMPLATE = {
     "title_template": "Research Update: {topic}",
     "subtitle_template": "AI-powered research insights",
-    "icon": "🔍",
-    "subject_prefix": "🔍 Research Update:",
-    "alert_banner": None
+    "subject_prefix": "Research Update:",
+    "show_breaking_badge": False
 }
 
 
@@ -157,11 +100,12 @@ DEFAULT_TEMPLATE = {
 # MARKDOWN TO HTML CONVERSION
 # =============================================================================
 
-def markdown_to_html(markdown_text: str) -> str:
+def markdown_to_html(markdown_text: str, is_daily_briefing: bool = False) -> str:
     """Convert markdown to HTML with professional inline styling.
 
     Args:
         markdown_text: Markdown text to convert
+        is_daily_briefing: If True, apply special styling for daily briefing sections
 
     Returns:
         HTML string with inline styles applied
@@ -169,7 +113,7 @@ def markdown_to_html(markdown_text: str) -> str:
     if not markdown_text:
         return ''
 
-    # Remove stray hash-only lines that can appear as visual separators
+    # Remove stray hash-only lines
     cleaned_lines = []
     for line in markdown_text.splitlines():
         if line.strip() in {"#", "##", "###", "####", "#####", "######"}:
@@ -178,73 +122,82 @@ def markdown_to_html(markdown_text: str) -> str:
     markdown_text = "\n".join(cleaned_lines)
 
     # Pre-process: Convert citation numbers [1], [2] to superscript format
-    # This handles cases where LLM outputs plain [N] instead of markdown links
     processed_text = re.sub(r'\[(\d+)\]', r'<sup>[\1]</sup>', markdown_text)
 
-    # Convert markdown to HTML using markdown2
+    # Convert markdown to HTML
     html = markdown2.markdown(
         processed_text,
         extras=['fenced-code-blocks', 'tables', 'strike', 'task_list']
     )
 
     # Apply inline styles for email client compatibility
+    # Using FAZ-inspired typography
     style_mappings = [
-        # Headers - improved hierarchy with better spacing
-        (r'<h1>', r'<h1 style="color: #111827; font-size: 26px; font-weight: 700; margin: 28px 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #667eea;">'),
-        (r'<h2>', r'<h2 style="color: #1f2937; font-size: 20px; font-weight: 700; margin: 24px 0 8px 0; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; text-transform: uppercase; letter-spacing: 0.02em;">'),
-        (r'<h3>', r'<h3 style="color: #374151; font-size: 17px; font-weight: 600; margin: 18px 0 6px 0;">'),
-        (r'<h4>', r'<h4 style="color: #4b5563; font-size: 15px; font-weight: 600; margin: 14px 0 4px 0;">'),
+        # H1 - Main title (rarely used in content)
+        (r'<h1>', f'<h1 style="color: {COLORS["primary"]}; font-family: Georgia, \'Times New Roman\', serif; font-size: 28px; font-weight: 700; margin: 0 0 16px 0; letter-spacing: -0.02em;">'),
 
-        # Paragraphs - tighter line height
-        (r'<p>', r'<p style="color: #374151; font-size: 15px; line-height: 1.6; margin: 0 0 12px 0;">'),
+        # H2 - Section headers (TOP STORY, BREAKING, etc.)
+        (r'<h2>', f'<h2 style="color: {COLORS["accent"]}; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; font-size: 12px; font-weight: 700; margin: 32px 0 12px 0; padding-bottom: 8px; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 2px solid {COLORS["accent"]};">'),
 
-        # Lists - more compact
-        (r'<ul>', r'<ul style="margin: 0 0 14px 0; padding-left: 20px;">'),
-        (r'<ol>', r'<ol style="margin: 0 0 14px 0; padding-left: 20px;">'),
-        (r'<li>', r'<li style="color: #374151; font-size: 15px; line-height: 1.5; margin-bottom: 6px;">'),
+        # H3 - Subsection headers (theme names)
+        (r'<h3>', f'<h3 style="color: {COLORS["primary"]}; font-family: Georgia, \'Times New Roman\', serif; font-size: 17px; font-weight: 700; margin: 20px 0 8px 0; letter-spacing: -0.01em;">'),
+
+        # H4 - Minor headers
+        (r'<h4>', f'<h4 style="color: {COLORS["primary"]}; font-family: Georgia, \'Times New Roman\', serif; font-size: 15px; font-weight: 700; margin: 16px 0 6px 0;">'),
+
+        # Paragraphs
+        (r'<p>', f'<p style="color: {COLORS["text"]}; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; font-size: 15px; line-height: 1.65; margin: 0 0 14px 0;">'),
+
+        # Lists
+        (r'<ul>', f'<ul style="margin: 0 0 16px 0; padding-left: 0; list-style: none;">'),
+        (r'<ol>', f'<ol style="margin: 0 0 16px 0; padding-left: 20px;">'),
+        (r'<li>', f'<li style="color: {COLORS["text"]}; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; font-size: 15px; line-height: 1.6; margin-bottom: 8px; padding-left: 0;">'),
 
         # Links
-        (r'<a href="', r'<a style="color: #4f46e5; text-decoration: none; font-weight: 500;" href="'),
+        (r'<a href="', f'<a style="color: {COLORS["accent"]}; text-decoration: none; font-weight: 500; border-bottom: 1px solid {COLORS["accent"]};" href="'),
 
-        # Text formatting
-        (r'<strong>', r'<strong style="color: #1f2937; font-weight: 600;">'),
-        (r'<em>', r'<em style="font-style: italic;">'),
+        # Strong/Bold - for headlines within content
+        (r'<strong>', f'<strong style="color: {COLORS["primary"]}; font-weight: 700;">'),
+
+        # Emphasis
+        (r'<em>', '<em style="font-style: italic;">'),
 
         # Tables
-        (r'<table>', r'<table style="border-collapse: collapse; width: 100%; margin: 16px 0;">'),
-        (r'<th>', r'<th style="border: 1px solid #e5e7eb; padding: 10px; background: #f9fafb; text-align: left; font-weight: 600;">'),
-        (r'<td>', r'<td style="border: 1px solid #e5e7eb; padding: 10px;">'),
+        (r'<table>', f'<table style="border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px;">'),
+        (r'<th>', f'<th style="border: 1px solid {COLORS["border"]}; padding: 10px 12px; background: {COLORS["secondary"]}; text-align: left; font-weight: 600; color: {COLORS["primary"]};">'),
+        (r'<td>', f'<td style="border: 1px solid {COLORS["border"]}; padding: 10px 12px; color: {COLORS["text"]};">'),
 
         # Code
-        (r'<code>', r'<code style="background: #f3f4f6; padding: 2px 5px; border-radius: 3px; font-family: monospace; font-size: 14px;">'),
-        (r'<pre>', r'<pre style="background: #f3f4f6; padding: 14px; border-radius: 6px; overflow-x: auto; margin: 14px 0;">'),
+        (r'<code>', f'<code style="background: {COLORS["secondary"]}; padding: 2px 6px; border-radius: 3px; font-family: \'SF Mono\', Monaco, monospace; font-size: 13px; color: {COLORS["primary"]};">'),
+        (r'<pre>', f'<pre style="background: {COLORS["secondary"]}; padding: 16px; border-radius: 6px; overflow-x: auto; margin: 16px 0;">'),
 
-        # Superscripts (for citation numbers) - more visible
-        (r'<sup>', r'<sup style="color: #4f46e5; font-weight: 600; font-size: 11px; vertical-align: super;">'),
+        # Superscripts (citations) - gold accent color
+        (r'<sup>', f'<sup style="color: {COLORS["accent"]}; font-weight: 600; font-size: 10px; vertical-align: super;">'),
 
-        # Horizontal rules (section dividers)
-        (r'<hr>', r'<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">'),
-        (r'<hr />', r'<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />'),
+        # Horizontal rules
+        (r'<hr>', f'<hr style="border: none; border-top: 1px solid {COLORS["border"]}; margin: 24px 0;">'),
+        (r'<hr />', f'<hr style="border: none; border-top: 1px solid {COLORS["border"]}; margin: 24px 0;" />'),
     ]
 
     for pattern, replacement in style_mappings:
         html = re.sub(pattern, replacement, html)
 
+    # Post-process: Add bullet character for unordered list items
+    html = re.sub(
+        r'<li style="([^"]+)">',
+        f'<li style="\\1"><span style="color: {COLORS["accent"]}; margin-right: 8px;">•</span>',
+        html
+    )
+
     return html
 
 
 # =============================================================================
-# CITATION EXTRACTION AND NUMBERING
+# CITATION HANDLING
 # =============================================================================
 
 def extract_and_number_citations(sections: list, evidence: list) -> tuple:
     """Extract citations from markdown, merge with evidence, assign numbers.
-
-    This function:
-    1. Finds all markdown links [text](url) in order of appearance
-    2. Merges with evidence citations (deduplicating by URL)
-    3. Assigns citation numbers in order of first appearance
-    4. Replaces markdown links with text<sup>[N]</sup>
 
     Args:
         sections: List of markdown section strings
@@ -252,18 +205,14 @@ def extract_and_number_citations(sections: list, evidence: list) -> tuple:
 
     Returns:
         tuple: (modified_sections, citations_registry)
-        - modified_sections: Sections with links replaced by superscripts
-        - citations_registry: List of dicts with {number, url, text, snippet, date}
     """
-    # Step 1: Find all markdown links in order of appearance
     citations_registry = []
-    url_to_number = {}  # For deduplication: url -> citation_number
+    url_to_number = {}
 
     for section in sections:
         if not section:
             continue
 
-        # Find all [text](url) patterns
         for match in re.finditer(r'\[([^\]]+)\]\(([^\)]+)\)', section):
             link_text = match.group(1)
             url = match.group(2).strip()
@@ -279,9 +228,7 @@ def extract_and_number_citations(sections: list, evidence: list) -> tuple:
                     "date": None
                 })
 
-    # Step 2: Merge evidence citations
     for ev in evidence:
-        # Handle both dict and object formats
         if isinstance(ev, dict):
             url = ev.get('url', '').strip()
             title = ev.get('title', '')
@@ -297,14 +244,12 @@ def extract_and_number_citations(sections: list, evidence: list) -> tuple:
             continue
 
         if url in url_to_number:
-            # URL already exists from inline link, add snippet and date
             idx = url_to_number[url] - 1
             if not citations_registry[idx]['snippet'] and snippet:
                 citations_registry[idx]['snippet'] = snippet
             if not citations_registry[idx]['date'] and date:
                 citations_registry[idx]['date'] = date
         else:
-            # New URL from evidence
             number = len(citations_registry) + 1
             url_to_number[url] = number
             citations_registry.append({
@@ -315,219 +260,197 @@ def extract_and_number_citations(sections: list, evidence: list) -> tuple:
                 "date": date
             })
 
-    # Step 3: Replace markdown links with text + superscript
     modified_sections = []
     for section in sections:
         if not section:
             modified_sections.append(section)
             continue
 
-        modified = section
-
-        # Replace each [text](url) with text<sup>[N]</sup>
         def replace_link(match):
             link_text = match.group(1)
             url = match.group(2).strip()
             number = url_to_number.get(url, '?')
             return f'{link_text}<sup>[{number}]</sup>'
 
-        modified = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', replace_link, modified)
+        modified = re.sub(r'\[([^\]]+)\]\(([^\)]+)\)', replace_link, section)
         modified_sections.append(modified)
 
     return modified_sections, citations_registry
 
 
-# =============================================================================
-# CITATION RENDERING
-# =============================================================================
-
 def render_citations_html(citations: list) -> str:
-    """Render citations as a compact, professional list.
+    """Render citations as a clean, professional sources list.
 
     Args:
-        citations: List of citation dicts with {number, url, text, date}
+        citations: List of citation dicts
 
     Returns:
-        HTML string with citation section
+        HTML string with sources section
     """
-    if not citations or len(citations) == 0:
+    if not citations:
         return ''
 
-    citation_items = []
-
+    citation_rows = []
     for citation in citations:
         number = citation.get('number', '?')
         url = citation.get('url', '#')
         date = citation.get('date', '')
         title = citation.get('text', citation.get('title', 'Source'))
 
-        # Compact citation row
-        date_str = f'<span style="color: #9ca3af; margin-left: 8px;">({date})</span>' if date else ''
-        citation_html = f'''
-            <div style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
-                <div style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 2px;">[{number}] {title}{date_str}</div>
-                <a href="{url}" style="font-size: 13px; color: #4f46e5; text-decoration: none; word-break: break-all;">{url}</a>
-            </div>
-        '''
-        citation_items.append(citation_html)
+        # Extract domain for display
+        domain = url.split('/')[2] if url.startswith('http') and len(url.split('/')) > 2 else ''
 
-    citations_html = ''.join(citation_items)
+        date_str = f' · {date}' if date else ''
+
+        citation_rows.append(f'''
+            <tr>
+                <td style="padding: 8px 12px 8px 0; vertical-align: top; width: 30px; color: {COLORS["accent"]}; font-weight: 600; font-size: 13px;">[{number}]</td>
+                <td style="padding: 8px 0; vertical-align: top;">
+                    <div style="font-size: 14px; color: {COLORS["primary"]}; font-weight: 500; margin-bottom: 2px;">{title}</div>
+                    <div style="font-size: 12px; color: {COLORS["text_light"]};">{domain}{date_str}</div>
+                    <a href="{url}" style="font-size: 12px; color: {COLORS["accent"]}; text-decoration: none; word-break: break-all;">{url}</a>
+                </td>
+            </tr>
+        ''')
 
     return f'''
-        <div style="background: #f9fafb; padding: 20px; margin: 24px 0 0 0; border-radius: 6px; border: 1px solid #e5e7eb;">
-            <h2 style="margin: 0 0 12px 0; color: #1f2937; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; border-bottom: none;">Quellensammlung</h2>
-            {citations_html}
+        <div style="margin-top: 32px; padding-top: 24px; border-top: 2px solid {COLORS["accent"]};">
+            <h2 style="color: {COLORS["accent"]}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; font-weight: 700; margin: 0 0 16px 0; text-transform: uppercase; letter-spacing: 0.1em;">Sources</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+                {''.join(citation_rows)}
+            </table>
         </div>
     '''
 
 
 # =============================================================================
-# METADATA RENDERING
+# HEADER COMPONENTS
 # =============================================================================
 
-def render_metadata_badge(
+def render_header(
     research_topic: str,
     strategy_slug: str,
-    evidence_count: int,
     executed_at: str
 ) -> str:
-    """Render metadata information as a compact info bar.
+    """Render the briefing header with logo, title, and metadata.
 
     Args:
-        research_topic: The research topic (not displayed - shown in headline)
+        research_topic: The research topic
         strategy_slug: Strategy identifier
-        evidence_count: Number of sources analyzed (not displayed)
-        executed_at: ISO timestamp of execution
+        executed_at: ISO timestamp
 
     Returns:
-        HTML string with metadata bar
+        HTML string for header
     """
-    # Format the execution time
+    # Format date
     try:
         dt = datetime.fromisoformat(executed_at.replace('Z', '+00:00'))
-        formatted_date = dt.strftime('%A, %B %d, %Y at %I:%M %p')
+        formatted_date = dt.strftime('%d. %B %Y')
+        formatted_time = dt.strftime('%H:%M')
     except (ValueError, AttributeError):
         formatted_date = executed_at
+        formatted_time = ""
 
-    # Simpler, more compact metadata display
     return f'''
-        <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 12px 16px; background: #f8fafc; border-radius: 6px; margin: 0 0 16px 0; font-size: 13px; color: #64748b; border-left: 3px solid #667eea;">
-            <span><strong style="color: #475569;">Strategy:</strong> {strategy_slug}</span>
-            <span><strong style="color: #475569;">Generated:</strong> {formatted_date}</span>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 24px;">
+            <tr>
+                <td style="vertical-align: middle; width: 60px;">
+                    <img src="{LOGO_URL}" alt="Web Research Agent" width="48" height="48" style="display: block;">
+                </td>
+                <td style="vertical-align: middle; padding-left: 16px;">
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 11px; font-weight: 600; color: {COLORS["accent"]}; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;">Daily Briefing</div>
+                    <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: 700; color: {COLORS["primary"]}; margin: 0; letter-spacing: -0.02em; line-height: 1.2;">{research_topic}</h1>
+                </td>
+            </tr>
+        </table>
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 12px 16px; background: {COLORS["secondary"]}; border-radius: 4px; margin-bottom: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: {COLORS["text_light"]}; border-left: 3px solid {COLORS["accent"]};">
+            <span><strong style="color: {COLORS["primary"]};">Datum:</strong> {formatted_date}</span>
+            <span style="color: {COLORS["border"]};">|</span>
+            <span><strong style="color: {COLORS["primary"]};">Strategie:</strong> {strategy_slug}</span>
+            <span style="color: {COLORS["border"]};">|</span>
+            <span><strong style="color: {COLORS["primary"]};">Generiert:</strong> {formatted_time} Uhr</span>
         </div>
     '''
 
 
-# =============================================================================
-# BANNER RENDERING
-# =============================================================================
-
-def render_disclaimer_banner() -> str:
-    """Render standard AI disclaimer banner for all emails.
+def render_ai_notice() -> str:
+    """Render the AI-generated content notice.
 
     Returns:
-        HTML string with disclaimer banner
+        HTML string for notice banner
     """
-    return '''
-        <div style="background: #fefce8; border-left: 3px solid #ca8a04; padding: 10px 14px; margin-bottom: 20px; border-radius: 4px;">
-            <p style="margin: 0; color: #713f12; font-size: 13px; line-height: 1.5;">
-                <strong>ℹ️ Hinweis:</strong> Dieses Briefing wurde von einem KI-Agenten erstellt und kann Ungenauigkeiten enthalten. Bitte prüfen Sie alle Quellen sorgfältig.
+    return f'''
+        <div style="background: {COLORS["warning_bg"]}; border-left: 3px solid {COLORS["warning_border"]}; padding: 12px 16px; margin-bottom: 24px; border-radius: 0 4px 4px 0;">
+            <p style="margin: 0; color: {COLORS["warning_text"]}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; line-height: 1.5;">
+                <strong>Hinweis:</strong> Dieses Briefing wurde von einem KI-Agenten in Eigenrecherche erstellt. Bitte prüfen Sie alle Quellen sorgfältig.
             </p>
         </div>
     '''
 
 
-def render_alert_banner(banner_config: Optional[dict]) -> str:
-    """Render a strategy-specific alert banner.
+# =============================================================================
+# FOOTER
+# =============================================================================
 
-    Args:
-        banner_config: Dict with background, border_color, text_color, icon, label
+def render_footer() -> str:
+    """Render the email footer.
 
     Returns:
-        HTML string with alert banner or empty string if no banner
+        HTML string for footer
     """
-    if not banner_config:
-        return ''
-
     return f'''
-        <div style="background: {banner_config['background']}; border-left: 4px solid {banner_config['border_color']}; padding: 16px; margin-bottom: 24px; border-radius: 4px;">
-            <strong style="color: {banner_config['text_color']};">{banner_config['icon']} {banner_config['label']}</strong>
+        <div style="background: {COLORS["primary"]}; color: {COLORS["secondary"]}; padding: 24px 32px; text-align: center; border-radius: 0 0 6px 6px; margin-top: 32px;">
+            <div style="font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 14px; color: #ffffff; margin-bottom: 4px;">Web Research Agent</div>
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: {COLORS["text_light"]};">AI-powered research delivered to your inbox</div>
         </div>
     '''
 
 
 # =============================================================================
-# LOGO CONFIGURATION
-# =============================================================================
-
-# Logo URL - hosted version of the research agent logo
-# Can be updated to point to your own hosted logo
-LOGO_URL = "https://webresearchagent.replit.app/static/logo.png"
-
-
-# =============================================================================
-# COMPLETE EMAIL TEMPLATE WRAPPER
+# COMPLETE EMAIL WRAPPER
 # =============================================================================
 
 def create_email_html(research_topic: str, date_str: str, content_html: str) -> str:
-    """Wrap content in a complete, professional email template.
-
-    This creates a full HTML email with:
-    - Email-safe structure (MSO tables, Outlook compatibility)
-    - Metadata card serves as the header (no separate header)
-    - Professional footer with branding
-    - Responsive design for mobile
-    - Power Automate paragraph wrapper escape
+    """Wrap content in complete email template.
 
     Args:
-        research_topic: The research topic (not used - shown in metadata card)
-        date_str: Date string (not used - shown in metadata card)
-        content_html: Main content HTML (includes metadata card as first element)
+        research_topic: The research topic
+        date_str: Date string
+        content_html: Main content HTML
 
     Returns:
-        Complete HTML email ready for Outlook
+        Complete HTML email
     """
     return f'''<!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{research_topic}</title>
+    <title>{research_topic} - Daily Briefing</title>
     <style>
         body, table, td, a {{ -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
         table, td {{ mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
         img {{ -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }}
-        body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f1f5f9; color: #1f2937; }}
-        .email-container {{ max-width: 800px; margin: 0 auto; background-color: #ffffff; }}
-        .content {{ padding: 32px 40px 40px 40px; }}
-        .footer {{ background: #1e293b; color: #94a3b8; padding: 24px 40px; text-align: center; }}
-        .footer p {{ margin: 4px 0; font-size: 13px; }}
-        .footer-brand {{ font-weight: 600; color: #ffffff; font-size: 14px; }}
+        body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: {COLORS["background"]}; }}
+        .email-container {{ max-width: 680px; margin: 0 auto; background-color: {COLORS["white"]}; }}
         @media only screen and (max-width: 600px) {{
             .content {{ padding: 20px !important; }}
-            .footer {{ padding: 20px !important; }}
         }}
     </style>
     <!--[if mso]>
     <style type="text/css">
-        body, table, td {{font-family: Arial, Helvetica, sans-serif !important;}}
+        body, table, td {{ font-family: Arial, Helvetica, sans-serif !important; }}
     </style>
     <![endif]-->
 </head>
-<body>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f1f5f9;">
+<body style="margin: 0; padding: 0; background-color: {COLORS["background"]};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: {COLORS["background"]};">
         <tr>
-            <td align="center" style="padding: 16px 0;">
-                <table role="presentation" class="email-container" cellspacing="0" cellpadding="0" border="0" style="max-width: 800px; width: 100%; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+            <td align="center" style="padding: 24px 16px;">
+                <table role="presentation" class="email-container" cellspacing="0" cellpadding="0" border="0" style="max-width: 680px; width: 100%; margin: 0 auto; background-color: {COLORS["white"]}; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                     <tr>
-                        <td class="content" style="padding: 32px 40px 40px 40px;">
+                        <td class="content" style="padding: 32px 40px;">
                             {content_html}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="footer" style="background: #1e293b; color: #94a3b8; padding: 24px 40px; text-align: center; border-radius: 0 0 8px 8px;">
-                            <p class="footer-brand" style="font-weight: 600; color: #ffffff; font-size: 14px; margin: 4px 0;">Web Research Agent</p>
-                            <p style="margin: 4px 0; font-size: 13px;">AI-powered research delivered to your inbox</p>
                         </td>
                     </tr>
                 </table>
@@ -540,7 +463,7 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
 
 
 # =============================================================================
-# MAIN EMAIL RENDERING FUNCTION
+# MAIN RENDERING FUNCTION
 # =============================================================================
 
 def render_complete_email(
@@ -552,74 +475,55 @@ def render_complete_email(
     executed_at: str,
     current_date: Optional[str] = None
 ) -> str:
-    """Render a complete HTML newsletter email with strategy-specific styling.
+    """Render a complete HTML newsletter email.
 
-    This is the main function that should be called from the API.
-    It combines all components into a professional, ready-to-send email.
+    This is the main function called from the API.
 
     Args:
         research_topic: The research topic/query
         sections: List of markdown section strings
-        citations: List of citation dicts with {number, url, text, snippet}
-        strategy_slug: Strategy identifier for template selection
+        citations: List of citation dicts
+        strategy_slug: Strategy identifier
         evidence_count: Number of sources analyzed
-        executed_at: ISO timestamp of execution
-        current_date: Optional date string for display
+        executed_at: ISO timestamp
+        current_date: Optional date string
 
     Returns:
         Complete HTML email string
     """
-    # Get strategy-specific template configuration
-    template_config = STRATEGY_TEMPLATES.get(strategy_slug, DEFAULT_TEMPLATE)
-
-    # Format current date for display
     if not current_date:
-        current_date = datetime.utcnow().strftime('%A, %B %d, %Y')
+        current_date = datetime.utcnow().strftime('%d. %B %Y')
 
-    # Build content HTML
+    is_daily_briefing = strategy_slug == 'daily_news_briefing'
+
+    # Build content
     content_parts = []
 
-    # 0. Research task headline - compact with clear hierarchy
-    headline_icon = template_config.get('icon', '🔍')
-    headline_html = f'''
-        <div style="margin: 0 0 8px 0;">
-            <div style="text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Research Task</div>
-            <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #111827; line-height: 1.3;">{headline_icon} {research_topic}</h1>
-        </div>
-    '''
-    content_parts.append(headline_html)
+    # 1. Header with logo, topic, metadata
+    header_html = render_header(research_topic, strategy_slug, executed_at)
+    content_parts.append(header_html)
 
-    # 1. Metadata badge (serves as header)
-    metadata_badge = render_metadata_badge(
-        research_topic, strategy_slug, evidence_count, executed_at
-    )
-    content_parts.append(metadata_badge)
+    # 2. AI notice
+    ai_notice = render_ai_notice()
+    content_parts.append(ai_notice)
 
-    # 2. Standard disclaimer banner (appears for all emails)
-    disclaimer_banner = render_disclaimer_banner()
-    content_parts.append(disclaimer_banner)
-
-    # 3. Alert banner (if applicable for strategy)
-    alert_banner = render_alert_banner(template_config.get('alert_banner'))
-    if alert_banner:
-        content_parts.append(alert_banner)
-
-    # 4. Main content sections (markdown to HTML)
+    # 3. Main content sections
     for section in sections:
         if section:
-            section_html = markdown_to_html(section)
+            section_html = markdown_to_html(section, is_daily_briefing)
             content_parts.append(section_html)
 
-    # 5. Citations
+    # 4. Citations/Sources
     citations_html = render_citations_html(citations)
     if citations_html:
         content_parts.append(citations_html)
 
-    # Combine all content
+    # 5. Footer
+    footer_html = render_footer()
+    content_parts.append(footer_html)
+
     content_html = '\n'.join(content_parts)
 
-    # Wrap in complete email template with simplified header
-    # Header now shows: Logo (left) + Research Topic + Date
     return create_email_html(research_topic, current_date, content_html)
 
 
@@ -628,7 +532,7 @@ def generate_strategy_subject_line(
     strategy_slug: str,
     current_date: Optional[str] = None
 ) -> str:
-    """Generate a strategy-aware email subject line.
+    """Generate email subject line.
 
     Args:
         research_topic: The research topic
@@ -636,15 +540,14 @@ def generate_strategy_subject_line(
         current_date: Optional date string
 
     Returns:
-        Formatted subject line with strategy-specific prefix
+        Formatted subject line
     """
     template_config = STRATEGY_TEMPLATES.get(strategy_slug, DEFAULT_TEMPLATE)
     prefix = template_config['subject_prefix']
 
     if not current_date:
-        current_date = datetime.utcnow().strftime('%B %d, %Y')
+        current_date = datetime.utcnow().strftime('%d.%m.%Y')
 
-    # For daily briefings, include date in subject
     if strategy_slug == 'daily_news_briefing':
         return f"{prefix} {research_topic} ({current_date})"
 
