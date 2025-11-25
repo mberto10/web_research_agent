@@ -77,31 +77,31 @@ tool_chain:
         Halte dich exakt an diese Struktur (Überschriften auf Deutsch):
 
         ## KURZÜBERBLICK
-        2-3 Sätze zu den wichtigsten Entwicklungen. Verweise auf Quellen mit [Kurzbezeichnung](URL) im Text.
+        2-3 Sätze zu den wichtigsten Entwicklungen. Verweise auf Quellen mit [Kurzbezeichnung](URL) im Text. Keine Bulletpoints.
 
         ## EILMELDUNGEN
         - Aufzählung von Entwicklungen <6h mit Zeitstempel. Quellen als [Text](URL) verlinken.
 
         ## WICHTIGE ENTWICKLUNGEN
         ### Überschrift
-        2-3 Sätze mit konkreten Fakten. Quellen als [Kurzname](URL) verlinken.
+        2-3 Sätze Fließtext mit konkreten Fakten (keine Bulletpoints). Quellen als [Kurzname](URL) verlinken.
 
         (Erstelle 3-5 solcher Abschnitte.)
 
         ## ANALYSE NACH THEMA
         ### Themenname
-        Ein Satz Fazit plus 2-3 Bulletpoints. Quellen als [Text](URL) verlinken.
+        2-4 Sätze Fließtext. Keine Bulletpoints. Quellen als [Text](URL) verlinken.
 
         ## MARKTAUSWIRKUNG (weglassen, falls nicht relevant)
-        Kurzer Absatz zu Auswirkungen für Investoren/Stakeholder. Quellen als [Text](URL) verlinken.
+        Kurzer Absatz (Fließtext) zu Auswirkungen für Investoren/Stakeholder. Quellen als [Text](URL) verlinken.
 
         ## WEITERE NENNUNGEN
-        - Weitere prägnante Updates als Bulletpoints. Quellen als [Text](URL) verlinken.
+        3-6 kurze Sätze, jeweils eigener Absatz oder Zeile, aber keine Bulletpoints. Quellen als [Text](URL) verlinken.
 
         Regeln:
-        - Verlinke alle Quellenverweise im Markdown-Format: [Beschreibender Text](vollständige-URL)
+        - Zitiere nur mit Nummern: Verwende [1](vollständige-URL), [2](vollständige-URL) etc. (keine Quellennamen inline)
         - Verwende ### für Unterpunkte unter ## Hauptsektionen (korrekte Überschriftenhierarchie beachten)
-        - Keine horizontalen Trennlinien zwischen Sektionen einfügen
+        - Keine horizontalen Trennlinien oder alleinstehende #-Zeilen zwischen Sektionen einfügen
         - KEINE separate Quellen-Sektion erstellen; alle Quellen bleiben inline verlinkt
         - Beende den Text direkt nach dem Abschnitt "## WEITERE NENNUNGEN"
     save_as: briefing_content
@@ -122,13 +122,14 @@ finalize:
 
     Erstelle anschließend die identische Struktur wie oben (Deutsch), ohne zusätzliche Abschnittstrennungen und ohne separate Quellenliste:
     - KURZÜBERBLICK (2-3 Sätze)
-    - EILMELDUNGEN
-    - WICHTIGE ENTWICKLUNGEN (3-5 Abschnitte)
-    - ANALYSE NACH THEMA (2-3 Themen)
+    - EILMELDUNGEN (einzige Section mit Bulletpoints)
+    - WICHTIGE ENTWICKLUNGEN (3-5 Abschnitte, Fließtext)
+    - ANALYSE NACH THEMA (2-3 Themen, Fließtext)
     - MARKTAUSWIRKUNG (falls relevant)
-    - WEITERE NENNUNGEN
+    - WEITERE NENNUNGEN (Fließtext, keine Bullets)
 
     Regeln:
     - Keine horizontalen Trennlinien ("---") einfügen.
-    - KEINE "Sources"/Quellen-Sektion anhängen; alle Quellen bleiben inline als [Text](URL).
+    - KEINE "Sources"/Quellen-Sektion anhängen; Quellen nur als Nummern im Text ([1](URL), [2](URL)).
+    - KEINE Bulletpoints außer in EILMELDUNGEN.
     - Beende den Text direkt nach "## WEITERE NENNUNGEN".

@@ -169,6 +169,14 @@ def markdown_to_html(markdown_text: str) -> str:
     if not markdown_text:
         return ''
 
+    # Remove stray hash-only lines that can appear as visual separators
+    cleaned_lines = []
+    for line in markdown_text.splitlines():
+        if line.strip() in {"#", "##", "###", "####", "#####", "######"}:
+            continue
+        cleaned_lines.append(line)
+    markdown_text = "\n".join(cleaned_lines)
+
     # Pre-process: Convert citation numbers [1], [2] to superscript format
     # This handles cases where LLM outputs plain [N] instead of markdown links
     processed_text = re.sub(r'\[(\d+)\]', r'<sup>[\1]</sup>', markdown_text)
@@ -182,9 +190,9 @@ def markdown_to_html(markdown_text: str) -> str:
     # Apply inline styles for email client compatibility
     style_mappings = [
         # Headers
-        (r'<h1>', r'<h1 style="color: #1a202c; font-size: 28px; font-weight: 700; margin: 32px 0 16px 0; padding-bottom: 12px; border-bottom: 3px solid #667eea;">'),
-        (r'<h2>', r'<h2 style="color: #2d3748; font-size: 22px; font-weight: 600; margin: 28px 0 14px 0; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0;">'),
-        (r'<h3>', r'<h3 style="color: #4a5568; font-size: 18px; font-weight: 600; margin: 20px 0 10px 0;">'),
+        (r'<h1>', r'<h1 style="color: #1a202c; font-size: 30px; font-weight: 750; margin: 32px 0 18px 0; padding-bottom: 12px; border-bottom: 3px solid #667eea;">'),
+        (r'<h2>', r'<h2 style="color: #2d3748; font-size: 24px; font-weight: 700; margin: 28px 0 14px 0; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0;">'),
+        (r'<h3>', r'<h3 style="color: #374151; font-size: 19px; font-weight: 650; margin: 20px 0 10px 0;">'),
         (r'<h4>', r'<h4 style="color: #4a5568; font-size: 16px; font-weight: 600; margin: 18px 0 8px 0;">'),
 
         # Paragraphs
@@ -212,7 +220,7 @@ def markdown_to_html(markdown_text: str) -> str:
         (r'<pre>', r'<pre style="background: #f7fafc; padding: 16px; border-radius: 6px; overflow-x: auto; margin: 16px 0;">'),
 
         # Superscripts (for citation numbers)
-        (r'<sup>', r'<sup style="color: #667eea; font-weight: 600; font-size: 11px;">'),
+        (r'<sup>', r'<sup style="color: #4c51bf; font-weight: 700; font-size: 13px;">'),
 
         # Horizontal rules (section dividers)
         (r'<hr>', r'<hr style="border: none; border-top: 2px solid #e2e8f0; margin: 32px 0;">'),
@@ -501,8 +509,8 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
         table, td {{ mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
         img {{ -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }}
         body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f5f7; color: #2d3748; }}
-        .email-container {{ max-width: 680px; margin: 0 auto; background-color: #ffffff; }}
-        .content {{ padding: 40px 40px 48px 40px; }}
+        .email-container {{ max-width: 780px; margin: 0 auto; background-color: #ffffff; }}
+        .content {{ padding: 44px 44px 52px 44px; }}
         .footer {{ background: #2d3748; color: #cbd5e0; padding: 32px 40px; text-align: center; }}
         .footer p {{ margin: 6px 0; font-size: 14px; }}
         .footer-brand {{ font-weight: 600; color: #ffffff; font-size: 16px; }}
@@ -581,6 +589,16 @@ def render_complete_email(
 
     # Build content HTML
     content_parts = []
+
+    # 0. Research task headline above metadata
+    headline_icon = template_config.get('icon', '🔍')
+    headline_html = f'''
+        <div style="margin: 0 0 12px 0;">
+            <div style="text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; color: #6b7280; font-weight: 700;">Research Task</div>
+            <h1 style="margin: 6px 0 0 0; font-size: 26px; font-weight: 750; color: #111827; line-height: 1.2;">{headline_icon} {research_topic}</h1>
+        </div>
+    '''
+    content_parts.append(headline_html)
 
     # 1. Metadata badge (serves as header)
     metadata_badge = render_metadata_badge(
