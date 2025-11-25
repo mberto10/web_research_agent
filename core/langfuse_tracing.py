@@ -83,6 +83,25 @@ class WorkflowContext:
     handler: Any
     client: Any
 
+    @property
+    def trace_id(self) -> Optional[str]:
+        """Get the trace ID for this workflow."""
+        if self.span:
+            # Try direct trace_id attribute
+            if hasattr(self.span, 'trace_id'):
+                return self.span.trace_id
+            # Try getting from span's internal state
+            if hasattr(self.span, '_trace_id'):
+                return self.span._trace_id
+            # Try id attribute (some spans use this)
+            if hasattr(self.span, 'id'):
+                span_id = self.span.id
+                # Span ID may contain trace_id prefix
+                if isinstance(span_id, str) and '-' in span_id:
+                    return span_id.split('-')[0]
+                return span_id
+        return None
+
     def update_trace(self, **kwargs: Any) -> None:
         if self.span:
             self.span.update_trace(**kwargs)

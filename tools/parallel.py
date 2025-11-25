@@ -5,12 +5,16 @@ from __future__ import annotations
 from typing import Any, Dict, List, Sequence
 import os
 import json
+import logging
 from urllib.parse import urlparse
 
 import requests
 
 from core.state import Evidence
 from core.langfuse_tracing import get_langfuse_client, observe
+from core.utils import retry_on_exception
+
+logger = logging.getLogger(__name__)
 
 
 class ParallelSearchAdapter:
@@ -121,6 +125,7 @@ class ParallelSearchAdapter:
 
         return payload
 
+    @retry_on_exception(max_retries=3, base_delay=1.0, exceptions=(requests.RequestException,))
     def _request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         headers = {
             "x-api-key": self.api_key,
@@ -180,7 +185,7 @@ class ParallelSearchAdapter:
                     output={"error": str(exc)},
                     metadata={"status": "error"},
                 )
-            print(f"Parallel Search API error: {exc}")
+            logger.warning("Parallel Search API error: %s", exc)
             return []
 
         evidence = self._normalize_results(data)

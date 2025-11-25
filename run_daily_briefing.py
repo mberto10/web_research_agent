@@ -23,6 +23,11 @@ from tools import register_default_adapters
 from core.langfuse_tracing import workflow_span, flush_traces
 from core.debug_log import dbg
 from core.enhanced_debug import init_debug_session
+from core.analytics import (
+    MetricsCollector,
+    record_strategy_scores,
+    set_metrics_collector,
+)
 
 
 def setup_environment():
@@ -87,6 +92,14 @@ def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hou
             tracing.update_trace(metadata={"status": "failed", "error": str(e)})
             tracing.flush()
             return False
+
+        # Initialize metrics collector
+        collector = MetricsCollector(strategy_slug="daily_news_briefing")
+        set_metrics_collector(collector)
+
+        # Set trace_id from the workflow context
+        if tracing.trace_id:
+            collector.set_trace_id(tracing.trace_id)
 
         # Prepare state
         print("[3/5] Preparing research state...")
@@ -157,6 +170,12 @@ def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hou
             print(f"  - Evidence collected: {len(evidence)} items")
             print(f"  - Sections generated: {len(sections)}")
             print(f"  - Citations: {len(citations)}")
+
+            # Build and record strategy metrics
+            metrics = collector.build(result)
+            if collector._metrics.trace_id:
+                if record_strategy_scores(collector._metrics.trace_id, metrics):
+                    print(f"  - Strategy metrics recorded to Langfuse")
         except Exception as e:
             print(f"  [ERROR] Workflow failed: {e}")
             tracing.update_trace(metadata={"status": "failed", "error": str(e)})
@@ -274,6 +293,8 @@ def run_briefing(topic: str, industry: str = None, timeframe: str = "last 24 hou
     
     tracing.flush()
     flush_traces()
+    # Clear the collector to avoid memory leaks
+    set_metrics_collector(None)
     # Emit debug log after run
     if dbg.is_enabled():
         try:

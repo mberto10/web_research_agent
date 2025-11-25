@@ -3,6 +3,7 @@ from __future__ import annotations
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import json
 import logging
@@ -21,6 +22,7 @@ from .config import (
     get_node_prompt,
 )
 from .langfuse_tracing import get_langfuse_client, observe
+from .analytics import get_metrics_collector
 from tools import get_tool, register_default_adapters
 from .scope import scope_request
 from strategies import load_strategy, select_strategy, get_index_entry_by_slug
@@ -201,10 +203,11 @@ def _render_template(template: str, variables: Dict[str, str]) -> str:
 
 
 def _canonical_url(url: str) -> str:
-    """Normalize URLs for deduplication."""
+    """Normalize URLs for deduplication while preserving query parameters."""
     parsed = urlparse(url)
     clean_path = parsed.path.rstrip("/")
-    return urlunparse((parsed.scheme, parsed.netloc, clean_path, "", "", ""))
+    # Preserve query params, strip only fragment (anchor)
+    return urlunparse((parsed.scheme, parsed.netloc, clean_path, parsed.params, parsed.query, ""))
 
 
 def _dedupe_and_score(evidence: List[Evidence], limit: int | None) -> List[Evidence]:
@@ -297,7 +300,7 @@ def _refine_queries_with_llm(
             response_format={"type": "json_object"},
             **call_kwargs,
         )
-        content = response.choices[0].message["content"]
+        content = response.choices[0].message.content
         if lf_client:
             usage = getattr(response, "usage", None)
             usage_details = None
@@ -312,7 +315,8 @@ def _refine_queries_with_llm(
                 usage_details=usage_details,
             )
         data = json.loads(content)
-    except Exception:
+    except Exception as e:
+        logger.warning("Query refinement failed: %s", e)
         return {}
 
     if not isinstance(data, dict):
@@ -330,6 +334,10 @@ def _refine_queries_with_llm(
 @observe(as_type="span", capture_input=False, capture_output=False, name="scope-phase")
 async def scope(state: State) -> State:
     """Scope phase categorizes the request and selects a strategy."""
+    collector = get_metrics_collector()
+    if collector:
+        collector.start_phase("scope")
+
     lf_client = get_langfuse_client()
 
     # Capture input
@@ -431,7 +439,229 @@ async def scope(state: State) -> State:
         except Exception:
             pass
 
+    if collector:
+        collector.end_phase("scope")
+        if state.strategy_slug:
+            collector.set_strategy_slug(state.strategy_slug)
+
     return state
+
+
+def _execute_research_patch(
+    patch: Dict[str, Any],
+    canonical_topic: str,
+    state_time_window: str | None,
+    state_vars: Dict[str, Any],
+    research_steps: List[Dict[str, Any]],
+    base_queries: Dict[str, str],
+    max_results: int | None,
+    max_llm_queries: int | None,
+    strategy_slug: str | None,
+) -> List[Evidence]:
+    """Execute research steps for a single patch (fan-out unit).
+
+    This function is designed to be called in parallel via ThreadPoolExecutor.
+    It processes all research steps for one patch and returns collected evidence.
+
+    Args:
+        patch: Variable overrides for this fan-out iteration
+        canonical_topic: The main topic for research
+        state_time_window: Time window from state
+        state_vars: Variables from state (copied for thread safety)
+        research_steps: Normalized research steps to execute
+        base_queries: Base query templates
+        max_results: Result limit per patch
+        max_llm_queries: LLM query limit
+        strategy_slug: Strategy identifier for config lookups
+
+    Returns:
+        List of Evidence items collected during research
+    """
+    variables: Dict[str, Any] = {
+        "topic": canonical_topic,
+        "subtopic": canonical_topic,
+        "time_window": state_time_window or "",
+        "region": "",
+    }
+    variables.update(state_vars)
+    variables.update(patch)
+
+    task_evidence: List[Evidence] = []
+    last_results: List[Evidence] = []
+    task_queries = dict(base_queries)
+
+    for idx, step in enumerate(research_steps):
+        step_label = step.get("use") or step.get("name") or f"step-{idx}"
+
+        # Note: _eval_when needs state, but we only use simple expressions here
+        # For thread safety, skip complex when conditions in parallel mode
+        when_expr = step.get("when")
+        if when_expr:
+            # Simple evaluation for parallel context - only support unique_sources check
+            unique_sources = len({ev.url for ev in task_evidence}) if task_evidence else 0
+            context: Dict[str, Any] = {**variables, "unique_sources": unique_sources}
+            import re as _re
+            m = _re.match(r"^(\w+)\s*(==|<=|>=|<|>)\s*(\d+)$", when_expr.strip())
+            if m:
+                key, op, num_s = m.group(1), m.group(2), m.group(3)
+                left = context.get(key, 0)
+                try:
+                    right = int(num_s)
+                    should_skip = False
+                    if op == "<" and not (left < right):
+                        should_skip = True
+                    elif op == ">" and not (left > right):
+                        should_skip = True
+                    elif op == "<=" and not (left <= right):
+                        should_skip = True
+                    elif op == ">=" and not (left >= right):
+                        should_skip = True
+                    elif op == "==" and not (left == right):
+                        should_skip = True
+                    if should_skip:
+                        continue
+                except Exception:
+                    pass
+            elif not context.get(when_expr.strip()):
+                continue
+
+        use = step.get("use")
+        if not use and not step.get("name"):
+            continue
+
+        # Legacy tool-chain support
+        if not use and step.get("name"):
+            name: str = step["name"]
+            results: Any = []
+            try:
+                if name.startswith("sonar"):
+                    prompt_t = task_queries.get("sonar", "{{topic}}")
+                    prompt = _render_template(prompt_t, variables)
+                    tool = get_tool("sonar")
+                    results = tool.call(prompt, **step.get("params", {}))
+                elif name.startswith("exa_search"):
+                    query_t = task_queries.get("exa_search", "{{topic}}")
+                    query = _render_template(query_t, variables)
+                    params = {
+                        key: _render_template(val, variables) if isinstance(val, str) else val
+                        for key, val in step.get("params", {}).items()
+                    }
+                    tool = get_tool("exa")
+                    results = tool.call(query, **params)
+                elif name.startswith("exa_contents"):
+                    top_k = step.get("params", {}).get("top_k", 0)
+                    tool = get_tool("exa")
+                    fetched: List[Evidence] = []
+                    for ev in last_results[:top_k]:
+                        call_params = {k: v for k, v in step.get("params", {}).items() if k != "top_k"}
+                        original_score = ev.score
+                        content = tool.contents(ev.url, **call_params)
+                        snippet_val = None
+                        if isinstance(content, list) and content:
+                            first = content[0]
+                            snippet_val = getattr(first, "snippet", None)
+                        elif isinstance(content, Evidence):
+                            snippet_val = content.snippet
+                        if snippet_val:
+                            ev.snippet = snippet_val
+                        if original_score is not None:
+                            ev.score = original_score
+                        fetched.append(ev)
+                    results = fetched
+                elif name.startswith("exa_find_similar"):
+                    seed = last_results[0].url if last_results else ""
+                    if seed:
+                        tool = get_tool("exa")
+                        results = tool.find_similar(seed, **step.get("params", {}))
+                    else:
+                        results = []
+                elif name.startswith("exa_answer"):
+                    query_t = task_queries.get("exa_answer", "{{topic}}")
+                    query = _render_template(query_t, variables)
+                    tool = get_tool("exa")
+                    answer_text = tool.answer(query, **step.get("params", {}))
+                    results = [
+                        Evidence(
+                            url="exa_answer",
+                            title="Exa Answer",
+                            snippet=answer_text,
+                            tool="exa",
+                        )
+                    ]
+                else:
+                    results = []
+            except Exception as exc:
+                _log_step_error(step_label, exc)
+                results = []
+
+            _record_evidence(results, task_evidence)
+            last_results = _as_evidence_list(results)
+
+            remaining = research_steps[idx + 1:]
+            allowed_keys = [
+                key
+                for key in (_step_query_key(s.get("name", "")) for s in remaining)
+                if key
+            ]
+            if last_results and allowed_keys:
+                suggestions = _refine_queries_with_llm(
+                    last_results, allowed_keys, max_llm_queries, strategy_slug
+                )
+                if suggestions:
+                    task_queries.update(suggestions)
+            continue
+
+        # Extended provider.method routing
+        overrides = get_step_call_overrides(strategy_slug, use)
+        foreach_expr = step.get("foreach")
+        try:
+            if foreach_expr:
+                items = eval_list_expr(
+                    foreach_expr,
+                    {**variables, **state_vars, "last_results": last_results},
+                ) or []
+                step_outputs: List[Any] = []
+                collected: List[Evidence] = []
+                for item in items:
+                    render_context = {
+                        **variables,
+                        **state_vars,
+                        "item": item,
+                        "last_results": last_results,
+                    }
+                    inputs = _resolve_step_inputs(
+                        step.get("inputs", {}),
+                        render_context,
+                        state_vars,
+                        overrides=overrides,
+                    )
+                    result = _execute_use(use, inputs)
+                    step_outputs.append(result)
+                    _record_evidence(result, task_evidence)
+                    collected.extend(_as_evidence_list(result))
+                # Note: save_as not supported in parallel mode (would need state access)
+                if collected:
+                    last_results = collected
+                continue
+
+            render_context = {**variables, **state_vars, "last_results": last_results}
+            inputs = _resolve_step_inputs(
+                step.get("inputs", {}),
+                render_context,
+                state_vars,
+                overrides=overrides,
+            )
+            results = _execute_use(use, inputs)
+        except Exception as exc:
+            _log_step_error(step_label, exc)
+            results = []
+
+        _record_evidence(results, task_evidence)
+        new_results = _as_evidence_list(results)
+        if new_results:
+            last_results = new_results
+
+    return _dedupe_and_score(task_evidence, max_results)
 
 
 @observe(as_type="span", capture_input=False, capture_output=False, name="research-phase")
@@ -442,6 +672,10 @@ def research(state: State) -> State:
     strategy's steps. We no longer fan-out across multiple tasks; instead we derive
     a canonical topic and run the chain once.
     """
+    collector = get_metrics_collector()
+    if collector:
+        collector.start_phase("research")
+
     lf_client = get_langfuse_client()
 
     # Capture input
@@ -477,6 +711,8 @@ def research(state: State) -> State:
                 )
             except Exception:
                 pass
+        if collector:
+            collector.end_phase("research")
         return state
 
     register_default_adapters(silent=True)
@@ -504,6 +740,8 @@ def research(state: State) -> State:
                 )
             except Exception:
                 pass
+        if collector:
+            collector.end_phase("research")
         return state
 
     base_queries = dict(strategy.queries or {})
@@ -554,188 +792,55 @@ def research(state: State) -> State:
 
     aggregated_evidence: List[Evidence] = []
 
-    for patch in patches:
-        variables: Dict[str, Any] = {
-            "topic": canonical_topic,
-            "subtopic": canonical_topic,
-            "time_window": state.time_window or "",
-            "region": "",
-        }
-        variables.update(state.vars)
-        variables.update(patch)
+    # Execute patches - use parallel execution when multiple patches exist
+    if len(patches) > 1:
+        # Parallel execution for fan-out scenarios
+        max_workers = min(len(patches), 4)  # Cap at 4 concurrent workers
+        logger.info(f"🔬 RESEARCH: Executing {len(patches)} patches in parallel (max_workers={max_workers})")
 
-        task_evidence: List[Evidence] = []
-        last_results: List[Evidence] = []
-        task_queries = dict(base_queries)
+        # Copy state.vars for thread safety
+        state_vars_copy = dict(state.vars)
 
-        for idx, step in enumerate(research_steps):
-            step_label = step.get("use") or step.get("name") or f"step-{idx}"
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    _execute_research_patch,
+                    patch,
+                    canonical_topic,
+                    state.time_window,
+                    state_vars_copy,
+                    research_steps,
+                    base_queries,
+                    max_results,
+                    max_llm_queries,
+                    state.strategy_slug,
+                ): patch
+                for patch in patches
+            }
 
-            if step.get("when") and not _eval_when(step["when"], state):
-                continue
-
-            use = step.get("use")
-            if not use and not step.get("name"):
-                continue
-
-            # Legacy tool-chain support -------------------------------------------------
-            if not use and step.get("name"):
-                name: str = step["name"]
-                results: Any = []
+            for future in as_completed(futures):
+                patch = futures[future]
                 try:
-                    if name.startswith("sonar"):
-                        prompt_t = task_queries.get("sonar", "{{topic}}")
-                        prompt = _render_template(prompt_t, variables)
-                        tool = get_tool("sonar")
-                        results = tool.call(prompt, **step.get("params", {}))
-                    elif name.startswith("exa_search"):
-                        query_t = task_queries.get("exa_search", "{{topic}}")
-                        query = _render_template(query_t, variables)
-                        params = {
-                            key: _render_template(val, variables) if isinstance(val, str) else val
-                            for key, val in step.get("params", {}).items()
-                        }
-                        tool = get_tool("exa")
-                        results = tool.call(query, **params)
-                    elif name.startswith("exa_contents"):
-                        top_k = step.get("params", {}).get("top_k", 0)
-                        tool = get_tool("exa")
-                        fetched: List[Evidence] = []
-                        for ev in last_results[:top_k]:
-                            call_params = {k: v for k, v in step.get("params", {}).items() if k != "top_k"}
-                            # Preserve original score before enhancement
-                            original_score = ev.score
-                            content = tool.contents(ev.url, **call_params)
-                            # Normalize various return shapes (list[Evidence] | Evidence)
-                            snippet_val = None
-                            if isinstance(content, list) and content:
-                                first = content[0]
-                                snippet_val = getattr(first, "snippet", None)
-                            elif isinstance(content, Evidence):
-                                snippet_val = content.snippet
-                            if snippet_val:
-                                ev.snippet = snippet_val
-                            # Restore original search relevance score
-                            if original_score is not None:
-                                ev.score = original_score
-                            fetched.append(ev)
-                        results = fetched
-                    elif name.startswith("exa_find_similar"):
-                        seed = last_results[0].url if last_results else ""
-                        if seed:
-                            tool = get_tool("exa")
-                            results = tool.find_similar(seed, **step.get("params", {}))
-                        else:
-                            results = []
-                    elif name.startswith("exa_answer"):
-                        query_t = task_queries.get("exa_answer", "{{topic}}")
-                        query = _render_template(query_t, variables)
-                        tool = get_tool("exa")
-                        answer_text = tool.answer(query, **step.get("params", {}))
-                        results = [
-                            Evidence(
-                                url="exa_answer",
-                                title="Exa Answer",
-                                snippet=answer_text,
-                                tool="exa",
-                            )
-                        ]
-                    else:
-                        results = []
-                except Exception as exc:  # pragma: no cover - network errors mocked in tests
-                    _log_step_error(step_label, exc)
-                    results = []
-
-                _record_evidence(results, task_evidence)
-                last_results = _as_evidence_list(results)
-
-                remaining = research_steps[idx + 1 :]
-                allowed_keys = [
-                    key
-                    for key in (
-                        _step_query_key(s.get("name", ""))
-                        for s in remaining
-                    )
-                    if key
-                ]
-                if last_results and allowed_keys:
-                    suggestions = _refine_queries_with_llm(
-                        last_results,
-                        allowed_keys,
-                        max_llm_queries,
-                        state.strategy_slug,
-                    )
-                    if suggestions:
-                        task_queries.update(suggestions)
-                        base_queries.update(suggestions)
-                continue
-
-            # Extended provider.method routing ---------------------------------------
-            overrides = get_step_call_overrides(state.strategy_slug, use)
-            foreach_expr = step.get("foreach")
-            try:
-                if foreach_expr:
-                    items = eval_list_expr(
-                        foreach_expr,
-                        {**variables, **state.vars, "last_results": last_results},
-                    ) or []
-                    step_outputs: List[Any] = []
-                    collected: List[Evidence] = []
-                    for item in items:
-                        render_context = {
-                            **variables,
-                            **state.vars,
-                            "item": item,
-                            "last_results": last_results,
-                        }
-                        inputs = _resolve_step_inputs(
-                            step.get("inputs", {}),
-                            render_context,
-                            state.vars,
-                            overrides=overrides,
-                        )
-                        # Log generic tool call
-                        try:
-                            provider, method = use.split(".", 1)
-                        except Exception:
-                            provider, method = use, "call"
-                        result = _execute_use(use, inputs)
-                        step_outputs.append(result)
-                        _record_evidence(result, task_evidence)
-                        collected.extend(_as_evidence_list(result))
-                    if step.get("save_as"):
-                        state.vars[step["save_as"]] = step_outputs
-                    if collected:
-                        last_results = collected
-                    continue
-
-                render_context = {**variables, **state.vars, "last_results": last_results}
-                inputs = _resolve_step_inputs(
-                    step.get("inputs", {}),
-                    render_context,
-                    state.vars,
-                    overrides=overrides,
-                )
-                try:
-                    provider, method = use.split(".", 1)
-                except Exception:
-                    provider, method = use, "call"
-                results = _execute_use(use, inputs)
-            except Exception as exc:  # pragma: no cover - defensive
-                _log_step_error(step_label, exc)
-                results = []
-
-            _record_evidence(results, task_evidence)
-            if step.get("save_as"):
-                state.vars[step["save_as"]] = results
-            new_results = _as_evidence_list(results)
-            if new_results:
-                last_results = new_results
-
-        # End for over research steps
-
-        processed = _dedupe_and_score(task_evidence, max_results)
-        aggregated_evidence.extend(processed)
+                    patch_evidence = future.result()
+                    aggregated_evidence.extend(patch_evidence)
+                    logger.debug(f"🔬 RESEARCH: Patch completed with {len(patch_evidence)} evidence items")
+                except Exception as exc:
+                    logger.warning(f"🔬 RESEARCH: Patch execution failed: {exc}")
+    else:
+        # Single patch - execute directly (original behavior)
+        patch = patches[0] if patches else {}
+        patch_evidence = _execute_research_patch(
+            patch,
+            canonical_topic,
+            state.time_window,
+            dict(state.vars),
+            research_steps,
+            base_queries,
+            max_results,
+            max_llm_queries,
+            state.strategy_slug,
+        )
+        aggregated_evidence.extend(patch_evidence)
 
     # Aggregate across topics (if any), then dedupe and apply budget once
     state.evidence.extend(aggregated_evidence)
@@ -759,6 +864,9 @@ def research(state: State) -> State:
             )
         except Exception:
             pass
+
+    if collector:
+        collector.end_phase("research")
 
     return state
 
@@ -835,6 +943,10 @@ def fill(state: State) -> State:
     Minimal implementation: creates a runtime plan and stores under state.vars["runtime_plan"].
     Skips if no llm_fill present or no API key; keeps architecture working even without fills.
     """
+    collector = get_metrics_collector()
+    if collector:
+        collector.start_phase("fill")
+
     lf_client = get_langfuse_client()
 
     # Capture input
@@ -873,6 +985,8 @@ def fill(state: State) -> State:
                 )
             except Exception:
                 pass
+        if collector:
+            collector.end_phase("fill")
         return state
     try:
         strategy = load_strategy(state.strategy_slug)
@@ -895,6 +1009,8 @@ def fill(state: State) -> State:
                 )
             except Exception:
                 pass
+        if collector:
+            collector.end_phase("fill")
         return state
 
     # Calculate dates based on time window to make them available to the LLM
@@ -1014,12 +1130,19 @@ def fill(state: State) -> State:
         except Exception:
             pass
 
+    if collector:
+        collector.end_phase("fill")
+
     return state
 
 
 @observe(as_type="span", capture_input=False, capture_output=False, name="finalize-phase")
 def finalize(state: State) -> State:
     """ReAct-style finalize node that can call tools then write report sections."""
+    collector = get_metrics_collector()
+    if collector:
+        collector.start_phase("finalize")
+
     lf_client = get_langfuse_client()
 
     # Capture input
@@ -1284,6 +1407,9 @@ def finalize(state: State) -> State:
             )
         except Exception:
             pass
+
+    if collector:
+        collector.end_phase("finalize")
 
     return state
 
@@ -1653,15 +1779,14 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                     params = {k: v for k, v in arguments.items() if k != "prompt"}
                     results = tool.call(arguments["prompt"], **params)
                     state.evidence.extend(results)
-            except Exception:
-                # Log but don't fail
-                pass
+            except Exception as e:
+                logger.warning("Reactive finalize tool call '%s' failed: %s", function_name, e)
             
             # Dedupe evidence after tool call and before writing
             try:
                 state.evidence = _dedupe_and_score(state.evidence, None)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Evidence deduplication failed: %s", e)
 
             # Now get the report with enhanced evidence
             updated_lines = format_evidence_lines(
@@ -1739,16 +1864,15 @@ def _finalize_reactive(state: State, strategy: Any, finalize_config: Dict[str, A
                         if c not in existing:
                             state.citations.append(c)
                             existing.add(c)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Citation parsing skipped: %s", e)
 
         # Parse sections from the report using helper function
         _parse_sections_from_content(state, report_content)
 
     except Exception as e:
         # Fallback to original behavior if ReAct fails
-        import traceback
-        traceback.print_exc()
+        logger.exception("Reactive finalize failed, returning partial state: %s", e)
         return state
 
     return state
@@ -1908,7 +2032,8 @@ def _llm_fill_inputs_simple(description: str, allowed: Dict[str, Any], model: st
         data = _json.loads(content)
         if isinstance(data, dict):
             return {k: str(v) if not isinstance(v, str) else v for k, v in data.items() if k in allowed}
-    except Exception:
+    except Exception as e:
+        logger.warning("LLM fill inputs failed: %s", e)
         return {}
     return {}
 

@@ -3,10 +3,14 @@ from __future__ import annotations
 """Adapter for the Exa search API."""
 
 from typing import Any, List
+import logging
 import os
 
 from core.state import Evidence
 from core.langfuse_tracing import get_langfuse_client, observe
+from core.utils import retry_on_exception
+
+logger = logging.getLogger(__name__)
 
 
 class ExaAdapter:
@@ -23,6 +27,21 @@ class ExaAdapter:
         from exa_py import Exa  # Imported lazily
 
         return Exa(self.api_key)
+
+    @retry_on_exception(max_retries=3, base_delay=1.0, exceptions=(Exception,))
+    def _search_with_retry(self, client: Any, query: str, **api_params: Any) -> Any:
+        """Internal search call with retry logic."""
+        return client.search(query, **api_params)
+
+    @retry_on_exception(max_retries=3, base_delay=1.0, exceptions=(Exception,))
+    def _get_contents_with_retry(self, client: Any, urls: List[str], **api_params: Any) -> Any:
+        """Internal get_contents call with retry logic."""
+        return client.get_contents(urls, **api_params)
+
+    @retry_on_exception(max_retries=3, base_delay=1.0, exceptions=(Exception,))
+    def _find_similar_with_retry(self, client: Any, url: str, **api_params: Any) -> Any:
+        """Internal find_similar call with retry logic."""
+        return client.find_similar(url, **api_params)
 
     @observe(as_type="span", name="exa-search")
     def search(self, query: str, **params: Any) -> List[Evidence]:
@@ -89,7 +108,7 @@ class ExaAdapter:
                 metadata={"adapter": "exa", "method": "search"},
             )
 
-        response = client.search(query, **api_params)
+        response = self._search_with_retry(client, query, **api_params)
         results = response.get("results") if isinstance(response, dict) else getattr(response, "results", [])
         evidence: List[Evidence] = []
         for r in results:
@@ -169,7 +188,7 @@ class ExaAdapter:
                 metadata={"adapter": "exa", "method": "contents"},
             )
 
-        response = client.get_contents(urls, **api_params)
+        response = self._get_contents_with_retry(client, urls, **api_params)
         
         # Handle response based on structure
         evidence = []
@@ -274,7 +293,7 @@ class ExaAdapter:
                 metadata={"adapter": "exa", "method": "find_similar"},
             )
 
-        response = client.find_similar(url, **api_params)
+        response = self._find_similar_with_retry(client, url, **api_params)
         results = response.get("results") if isinstance(response, dict) else getattr(response, "results", [])
         
         evidence: List[Evidence] = []

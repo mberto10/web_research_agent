@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import logging
 import re
+import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Sequence, Tuple
+from functools import wraps
+from typing import Any, Callable, Dict, List, Sequence, Tuple, TypeVar
+
+logger = logging.getLogger(__name__)
+T = TypeVar('T')
 
 
 def render_template_string(template: str, variables: Dict[str, Any]) -> str:
@@ -199,4 +205,43 @@ def format_date_for_query(date: datetime, format_type: str = "natural") -> str:
     else:
         return str(date)
 
+
+def retry_on_exception(
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 30.0,
+    exceptions: tuple = (Exception,),
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
+    """Decorator for exponential backoff retry on transient failures.
+
+    Args:
+        max_retries: Maximum number of retry attempts (default: 3)
+        base_delay: Initial delay in seconds (default: 1.0)
+        max_delay: Maximum delay cap in seconds (default: 30.0)
+        exceptions: Tuple of exception types to catch and retry
+
+    Returns:
+        Decorated function with retry logic
+    """
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> T:
+            last_exception: Exception | None = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        delay = min(base_delay * (2 ** attempt), max_delay)
+                        logger.warning(
+                            "Retry %d/%d for %s after %.1fs: %s",
+                            attempt + 1, max_retries, func.__name__, delay, e
+                        )
+                        time.sleep(delay)
+            if last_exception is not None:
+                raise last_exception
+            raise RuntimeError("Unexpected retry state")  # Should never reach here
+        return wrapper
+    return decorator
 
