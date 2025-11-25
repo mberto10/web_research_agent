@@ -74,36 +74,49 @@ tool_chain:
         Forschungsevidenz:
         {{evidence_text}}
 
-        Halte dich exakt an diese Struktur (Überschriften auf Deutsch):
+        Halte dich exakt an diese Struktur:
 
         ## KURZÜBERBLICK
-        2-3 Sätze zu den wichtigsten Entwicklungen. Verweise auf Quellen mit [Kurzbezeichnung](URL) im Text. Keine Bulletpoints.
+        2-3 Sätze zu den wichtigsten Entwicklungen. Quellen NUR als Nummern: [1], [2] etc. Keine Bulletpoints.
 
         ## EILMELDUNGEN
-        - Aufzählung von Entwicklungen <6h mit Zeitstempel. Quellen als [Text](URL) verlinken.
+        • vor X Stunden — Kurze Beschreibung der Entwicklung [1].
+        • vor X Stunden — Weitere Entwicklung [2].
+        (Nutze • statt - für Aufzählungen)
 
         ## WICHTIGE ENTWICKLUNGEN
-        ### Überschrift
-        2-3 Sätze Fließtext mit konkreten Fakten (keine Bulletpoints). Quellen als [Kurzname](URL) verlinken.
 
-        (Erstelle 3-5 solcher Abschnitte.)
+        ### Überschrift des ersten Themas
+        2-3 Sätze Fließtext mit konkreten Fakten. Quellen als Nummern [1], [2] am Satzende.
+
+        ### Überschrift des zweiten Themas
+        2-3 Sätze Fließtext. Quellen als Nummern [3], [4] am Satzende.
+
+        (Erstelle 3-5 solcher Unterabschnitte)
 
         ## ANALYSE NACH THEMA
-        ### Themenname
-        2-4 Sätze Fließtext. Keine Bulletpoints. Quellen als [Text](URL) verlinken.
 
-        ## MARKTAUSWIRKUNG (weglassen, falls nicht relevant)
-        Kurzer Absatz (Fließtext) zu Auswirkungen für Investoren/Stakeholder. Quellen als [Text](URL) verlinken.
+        ### Themenname
+        **Fazit:** Ein Satz Zusammenfassung.
+        - Kernpunkt eins mit Quellenangabe [5].
+        - Kernpunkt zwei mit Quellenangabe [6].
+
+        ### Weiteres Thema
+        **Fazit:** Ein Satz Zusammenfassung.
+        - Kernpunkt mit Quelle [7].
 
         ## WEITERE NENNUNGEN
-        3-6 kurze Sätze, jeweils eigener Absatz oder Zeile, aber keine Bulletpoints. Quellen als [Text](URL) verlinken.
+        • Kurzer Hinweis auf weitere relevante Entwicklung [8].
+        • Weiterer Punkt [9].
 
-        Regeln:
-        - Zitiere nur mit Nummern: Verwende [1](vollständige-URL), [2](vollständige-URL) etc. (keine Quellennamen inline)
-        - Verwende ### für Unterpunkte unter ## Hauptsektionen (korrekte Überschriftenhierarchie beachten)
-        - Keine horizontalen Trennlinien oder alleinstehende #-Zeilen zwischen Sektionen einfügen
-        - KEINE separate Quellen-Sektion erstellen; alle Quellen bleiben inline verlinkt
-        - Beende den Text direkt nach dem Abschnitt "## WEITERE NENNUNGEN"
+        WICHTIGE FORMATIERUNGSREGELN:
+        1. Quellen IMMER nur als Nummern [1], [2], [3] etc. - NIEMALS Quellennamen im Text
+        2. Nach jeder ## Hauptüberschrift eine Leerzeile, dann Inhalt
+        3. ### Unterüberschriften für Unterpunkte verwenden
+        4. Bulletpoints nur in EILMELDUNGEN, ANALYSE (unter Fazit) und WEITERE NENNUNGEN
+        5. KEINE horizontalen Linien (---) einfügen
+        6. KEINE separate Quellensammlung am Ende - Quellen werden automatisch generiert
+        7. Text endet nach ## WEITERE NENNUNGEN
     save_as: briefing_content
     phase: finalize
 
@@ -120,16 +133,29 @@ finalize:
     2. Bei widersprüchlichen Fakten führe sonar_call("{{topic}} verifizierte Fakten Zeitstrahl heute", search_recency_filter="day") aus.
     3. Maximal EIN zusätzlicher Tool-Aufruf zur Nachbesserung.
 
-    Erstelle anschließend die identische Struktur wie oben (Deutsch), ohne zusätzliche Abschnittstrennungen und ohne separate Quellenliste:
-    - KURZÜBERBLICK (2-3 Sätze)
-    - EILMELDUNGEN (einzige Section mit Bulletpoints)
-    - WICHTIGE ENTWICKLUNGEN (3-5 Abschnitte, Fließtext)
-    - ANALYSE NACH THEMA (2-3 Themen, Fließtext)
-    - MARKTAUSWIRKUNG (falls relevant)
-    - WEITERE NENNUNGEN (Fließtext, keine Bullets)
+    STRUKTUR (strikt einhalten):
+    ## KURZÜBERBLICK
+    2-3 Sätze Fließtext. Quellen nur als [1], [2] etc.
 
-    Regeln:
-    - Keine horizontalen Trennlinien ("---") einfügen.
-    - KEINE "Sources"/Quellen-Sektion anhängen; Quellen nur als Nummern im Text ([1](URL), [2](URL)).
-    - KEINE Bulletpoints außer in EILMELDUNGEN.
-    - Beende den Text direkt nach "## WEITERE NENNUNGEN".
+    ## EILMELDUNGEN
+    • vor X Stunden — Beschreibung [1].
+
+    ## WICHTIGE ENTWICKLUNGEN
+    ### Thema 1
+    Fließtext mit Quellen [2], [3].
+    ### Thema 2
+    Fließtext mit Quellen [4].
+
+    ## ANALYSE NACH THEMA
+    ### Themenname
+    **Fazit:** Zusammenfassung.
+    - Punkt mit [5].
+
+    ## WEITERE NENNUNGEN
+    • Hinweis [6].
+
+    REGELN:
+    - Quellen NUR als Nummern [1], [2] - NIEMALS Quellennamen wie "Tagesschau" im Text
+    - KEINE horizontalen Linien (---)
+    - KEINE separate Quellensammlung am Ende
+    - Text endet nach ## WEITERE NENNUNGEN

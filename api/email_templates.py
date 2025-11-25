@@ -189,42 +189,42 @@ def markdown_to_html(markdown_text: str) -> str:
 
     # Apply inline styles for email client compatibility
     style_mappings = [
-        # Headers
-        (r'<h1>', r'<h1 style="color: #1a202c; font-size: 30px; font-weight: 750; margin: 32px 0 18px 0; padding-bottom: 12px; border-bottom: 3px solid #667eea;">'),
-        (r'<h2>', r'<h2 style="color: #2d3748; font-size: 24px; font-weight: 700; margin: 28px 0 14px 0; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0;">'),
-        (r'<h3>', r'<h3 style="color: #374151; font-size: 19px; font-weight: 650; margin: 20px 0 10px 0;">'),
-        (r'<h4>', r'<h4 style="color: #4a5568; font-size: 16px; font-weight: 600; margin: 18px 0 8px 0;">'),
+        # Headers - improved hierarchy with better spacing
+        (r'<h1>', r'<h1 style="color: #111827; font-size: 26px; font-weight: 700; margin: 28px 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #667eea;">'),
+        (r'<h2>', r'<h2 style="color: #1f2937; font-size: 20px; font-weight: 700; margin: 24px 0 8px 0; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; text-transform: uppercase; letter-spacing: 0.02em;">'),
+        (r'<h3>', r'<h3 style="color: #374151; font-size: 17px; font-weight: 600; margin: 18px 0 6px 0;">'),
+        (r'<h4>', r'<h4 style="color: #4b5563; font-size: 15px; font-weight: 600; margin: 14px 0 4px 0;">'),
 
-        # Paragraphs
-        (r'<p>', r'<p style="color: #4a5568; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;">'),
+        # Paragraphs - tighter line height
+        (r'<p>', r'<p style="color: #374151; font-size: 15px; line-height: 1.6; margin: 0 0 12px 0;">'),
 
-        # Lists
-        (r'<ul>', r'<ul style="margin: 0 0 20px 0; padding-left: 24px;">'),
-        (r'<ol>', r'<ol style="margin: 0 0 20px 0; padding-left: 24px;">'),
-        (r'<li>', r'<li style="color: #4a5568; font-size: 15px; line-height: 1.7; margin-bottom: 10px;">'),
+        # Lists - more compact
+        (r'<ul>', r'<ul style="margin: 0 0 14px 0; padding-left: 20px;">'),
+        (r'<ol>', r'<ol style="margin: 0 0 14px 0; padding-left: 20px;">'),
+        (r'<li>', r'<li style="color: #374151; font-size: 15px; line-height: 1.5; margin-bottom: 6px;">'),
 
         # Links
-        (r'<a href="', r'<a style="color: #667eea; text-decoration: none; font-weight: 500;" href="'),
+        (r'<a href="', r'<a style="color: #4f46e5; text-decoration: none; font-weight: 500;" href="'),
 
         # Text formatting
-        (r'<strong>', r'<strong style="color: #2d3748; font-weight: 600;">'),
+        (r'<strong>', r'<strong style="color: #1f2937; font-weight: 600;">'),
         (r'<em>', r'<em style="font-style: italic;">'),
 
         # Tables
-        (r'<table>', r'<table style="border-collapse: collapse; width: 100%; margin: 20px 0;">'),
-        (r'<th>', r'<th style="border: 1px solid #e2e8f0; padding: 12px; background: #f7fafc; text-align: left; font-weight: 600;">'),
-        (r'<td>', r'<td style="border: 1px solid #e2e8f0; padding: 12px;">'),
+        (r'<table>', r'<table style="border-collapse: collapse; width: 100%; margin: 16px 0;">'),
+        (r'<th>', r'<th style="border: 1px solid #e5e7eb; padding: 10px; background: #f9fafb; text-align: left; font-weight: 600;">'),
+        (r'<td>', r'<td style="border: 1px solid #e5e7eb; padding: 10px;">'),
 
         # Code
-        (r'<code>', r'<code style="background: #f7fafc; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 14px;">'),
-        (r'<pre>', r'<pre style="background: #f7fafc; padding: 16px; border-radius: 6px; overflow-x: auto; margin: 16px 0;">'),
+        (r'<code>', r'<code style="background: #f3f4f6; padding: 2px 5px; border-radius: 3px; font-family: monospace; font-size: 14px;">'),
+        (r'<pre>', r'<pre style="background: #f3f4f6; padding: 14px; border-radius: 6px; overflow-x: auto; margin: 14px 0;">'),
 
-        # Superscripts (for citation numbers)
-        (r'<sup>', r'<sup style="color: #4c51bf; font-weight: 700; font-size: 13px;">'),
+        # Superscripts (for citation numbers) - more visible
+        (r'<sup>', r'<sup style="color: #4f46e5; font-weight: 600; font-size: 11px; vertical-align: super;">'),
 
         # Horizontal rules (section dividers)
-        (r'<hr>', r'<hr style="border: none; border-top: 2px solid #e2e8f0; margin: 32px 0;">'),
-        (r'<hr />', r'<hr style="border: none; border-top: 2px solid #e2e8f0; margin: 32px 0;" />'),
+        (r'<hr>', r'<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">'),
+        (r'<hr />', r'<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />'),
     ]
 
     for pattern, replacement in style_mappings:
@@ -342,7 +342,7 @@ def extract_and_number_citations(sections: list, evidence: list) -> tuple:
 # =============================================================================
 
 def render_citations_html(citations: list) -> str:
-    """Render citations as styled HTML cards.
+    """Render citations as a compact, professional list.
 
     Args:
         citations: List of citation dicts with {number, url, text, date}
@@ -361,30 +361,21 @@ def render_citations_html(citations: list) -> str:
         date = citation.get('date', '')
         title = citation.get('text', citation.get('title', 'Source'))
 
-        # Build citation card with number, URL, and date
-        if date:
-            citation_html = f'''
-            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 12px;">
-                <div style="font-size: 15px; font-weight: 600; color: #2d3748; margin: 0 0 8px 0;">[{number}] {title}</div>
-                <a href="{url}" style="font-size: 14px; color: #667eea; text-decoration: none; word-break: break-all; display: block; margin-bottom: 8px;">{url}</a>
-                <p style="font-size: 14px; color: #718096; line-height: 1.5; margin: 0;">{date}</p>
+        # Compact citation row
+        date_str = f'<span style="color: #9ca3af; margin-left: 8px;">({date})</span>' if date else ''
+        citation_html = f'''
+            <div style="padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+                <div style="font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 2px;">[{number}] {title}{date_str}</div>
+                <a href="{url}" style="font-size: 13px; color: #4f46e5; text-decoration: none; word-break: break-all;">{url}</a>
             </div>
-            '''
-        else:
-            citation_html = f'''
-            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 12px;">
-                <div style="font-size: 15px; font-weight: 600; color: #2d3748; margin: 0 0 8px 0;">[{number}] {title}</div>
-                <a href="{url}" style="font-size: 14px; color: #667eea; text-decoration: none; word-break: break-all; display: block;">{url}</a>
-            </div>
-            '''
-
+        '''
         citation_items.append(citation_html)
 
     citations_html = ''.join(citation_items)
 
     return f'''
-        <div style="background: #f7fafc; padding: 24px; margin: 32px 0; border-radius: 4px;">
-            <h2 style="margin-top: 0; color: #2d3748; font-size: 20px; border-bottom: none;">Quellensammlung</h2>
+        <div style="background: #f9fafb; padding: 20px; margin: 24px 0 0 0; border-radius: 6px; border: 1px solid #e5e7eb;">
+            <h2 style="margin: 0 0 12px 0; color: #1f2937; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; border-bottom: none;">Quellensammlung</h2>
             {citations_html}
         </div>
     '''
@@ -400,16 +391,16 @@ def render_metadata_badge(
     evidence_count: int,
     executed_at: str
 ) -> str:
-    """Render metadata information as a styled header card.
+    """Render metadata information as a compact info bar.
 
     Args:
-        research_topic: The research topic
+        research_topic: The research topic (not displayed - shown in headline)
         strategy_slug: Strategy identifier
         evidence_count: Number of sources analyzed (not displayed)
         executed_at: ISO timestamp of execution
 
     Returns:
-        HTML string with metadata header card
+        HTML string with metadata bar
     """
     # Format the execution time
     try:
@@ -418,13 +409,11 @@ def render_metadata_badge(
     except (ValueError, AttributeError):
         formatted_date = executed_at
 
+    # Simpler, more compact metadata display
     return f'''
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; padding: 24px 28px; margin: 0 0 32px 0; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);">
-            <div style="color: #ffffff; font-size: 22px; font-weight: 700; line-height: 1.3; margin: 0 0 12px 0;">{research_topic}</div>
-            <div style="color: rgba(255, 255, 255, 0.9); font-size: 14px; line-height: 1.6;">
-                <strong style="color: rgba(255, 255, 255, 0.95);">Strategy:</strong> {strategy_slug}<br>
-                <strong style="color: rgba(255, 255, 255, 0.95);">Generated:</strong> {formatted_date}
-            </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 12px 16px; background: #f8fafc; border-radius: 6px; margin: 0 0 16px 0; font-size: 13px; color: #64748b; border-left: 3px solid #667eea;">
+            <span><strong style="color: #475569;">Strategy:</strong> {strategy_slug}</span>
+            <span><strong style="color: #475569;">Generated:</strong> {formatted_date}</span>
         </div>
     '''
 
@@ -440,9 +429,9 @@ def render_disclaimer_banner() -> str:
         HTML string with disclaimer banner
     """
     return '''
-        <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-left: 3px solid #6c757d; padding: 14px 18px; margin-bottom: 28px; border-radius: 4px;">
-            <p style="margin: 0; color: #495057; font-size: 14px; line-height: 1.6;">
-                <strong style="color: #343a40;">ℹ️ Hinweis:</strong> Dieses Briefing wurde von einem KI-Agenten in Eigenrecherche erstellt und kann Ungenauigkeiten oder Fehler enthalten. Bitte prüfen Sie wenn notwendig alle Quellen sorgfältig und kontaktieren Sie das GenAI Team bei auftretenden Fehlern.
+        <div style="background: #fefce8; border-left: 3px solid #ca8a04; padding: 10px 14px; margin-bottom: 20px; border-radius: 4px;">
+            <p style="margin: 0; color: #713f12; font-size: 13px; line-height: 1.5;">
+                <strong>ℹ️ Hinweis:</strong> Dieses Briefing wurde von einem KI-Agenten erstellt und kann Ungenauigkeiten enthalten. Bitte prüfen Sie alle Quellen sorgfältig.
             </p>
         </div>
     '''
@@ -508,15 +497,15 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
         body, table, td, a {{ -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }}
         table, td {{ mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
         img {{ -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }}
-        body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f5f7; color: #2d3748; }}
-        .email-container {{ max-width: 780px; margin: 0 auto; background-color: #ffffff; }}
-        .content {{ padding: 44px 44px 52px 44px; }}
-        .footer {{ background: #2d3748; color: #cbd5e0; padding: 32px 40px; text-align: center; }}
-        .footer p {{ margin: 6px 0; font-size: 14px; }}
-        .footer-brand {{ font-weight: 600; color: #ffffff; font-size: 16px; }}
+        body {{ margin: 0 !important; padding: 0 !important; width: 100% !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f1f5f9; color: #1f2937; }}
+        .email-container {{ max-width: 800px; margin: 0 auto; background-color: #ffffff; }}
+        .content {{ padding: 32px 40px 40px 40px; }}
+        .footer {{ background: #1e293b; color: #94a3b8; padding: 24px 40px; text-align: center; }}
+        .footer p {{ margin: 4px 0; font-size: 13px; }}
+        .footer-brand {{ font-weight: 600; color: #ffffff; font-size: 14px; }}
         @media only screen and (max-width: 600px) {{
-            .content {{ padding: 24px !important; }}
-            .footer {{ padding: 24px !important; }}
+            .content {{ padding: 20px !important; }}
+            .footer {{ padding: 20px !important; }}
         }}
     </style>
     <!--[if mso]>
@@ -526,19 +515,19 @@ def create_email_html(research_topic: str, date_str: str, content_html: str) -> 
     <![endif]-->
 </head>
 <body>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f4f5f7;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f1f5f9;">
         <tr>
-            <td align="center" style="padding: 24px 0;">
-                <table role="presentation" class="email-container" cellspacing="0" cellpadding="0" border="0" style="max-width: 680px; margin: 0 auto; background-color: #ffffff;">
+            <td align="center" style="padding: 16px 0;">
+                <table role="presentation" class="email-container" cellspacing="0" cellpadding="0" border="0" style="max-width: 800px; width: 100%; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
                     <tr>
-                        <td class="content" style="padding: 40px 40px 48px 40px;">
+                        <td class="content" style="padding: 32px 40px 40px 40px;">
                             {content_html}
                         </td>
                     </tr>
                     <tr>
-                        <td class="footer" style="background: #2d3748; color: #cbd5e0; padding: 32px 40px; text-align: center;">
-                            <p class="footer-brand" style="font-weight: 600; color: #ffffff; font-size: 16px; margin: 6px 0;">Web Research Agent</p>
-                            <p style="margin: 6px 0; font-size: 14px;">AI-powered research delivered to your inbox</p>
+                        <td class="footer" style="background: #1e293b; color: #94a3b8; padding: 24px 40px; text-align: center; border-radius: 0 0 8px 8px;">
+                            <p class="footer-brand" style="font-weight: 600; color: #ffffff; font-size: 14px; margin: 4px 0;">Web Research Agent</p>
+                            <p style="margin: 4px 0; font-size: 13px;">AI-powered research delivered to your inbox</p>
                         </td>
                     </tr>
                 </table>
@@ -590,12 +579,12 @@ def render_complete_email(
     # Build content HTML
     content_parts = []
 
-    # 0. Research task headline above metadata
+    # 0. Research task headline - compact with clear hierarchy
     headline_icon = template_config.get('icon', '🔍')
     headline_html = f'''
-        <div style="margin: 0 0 12px 0;">
-            <div style="text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; color: #6b7280; font-weight: 700;">Research Task</div>
-            <h1 style="margin: 6px 0 0 0; font-size: 26px; font-weight: 750; color: #111827; line-height: 1.2;">{headline_icon} {research_topic}</h1>
+        <div style="margin: 0 0 8px 0;">
+            <div style="text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Research Task</div>
+            <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #111827; line-height: 1.3;">{headline_icon} {research_topic}</h1>
         </div>
     '''
     content_parts.append(headline_html)
