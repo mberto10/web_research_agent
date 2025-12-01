@@ -12,7 +12,7 @@ queries:
     Prioritize primary sources (official statements, wire services, government releases).
     Include concrete facts: timestamps, actors, quotes, metrics.
     Search in both German and English for comprehensive coverage.
-  parallel_queries: "[\"{{topic}} official statement {{current_date}}\",\"{{topic}} offizielle Stellungnahme {{current_date}}\",\"{{topic}} Reuters AP AFP dpa {{current_date}}\",\"{{topic}} breaking news last 24 hours\",\"{{topic}} aktuelle Entwicklungen heute\"]"
+  parallel_queries: "[\"{{topic}} official statement {{current_date}}\",\"{{topic}} offizielle Stellungnahme {{current_date}}\",\"{{topic}} Reuters AP AFP dpa {{current_date}}\",\"{{topic}} breaking news last 24 hours\",\"{{topic}} aktuelle Entwicklungen heute\",\"{{topic}} Handelsblatt FAZ Spiegel {{current_date}}\",\"{{topic}} latest developments analysis\"]"
 
   # Sonar prompts for targeted searches
   sonar_primary: |
@@ -39,35 +39,35 @@ tool_chain:
       objective: "{{parallel_objective}}"
       search_queries: "{{parallel_queries}}"
       mode: agentic
-      max_results: 10
+      max_results: 15
       excerpts: '{"max_chars_per_result": 4500}'
       fetch_policy: '{"max_age_seconds": 21600}'
     save_as: parallel_results
 
   - name: sonar_pulse
     params:
-      max_results: 6
+      max_results: 10
       system_prompt: "{{sonar_primary}}"
       search_mode: web
       search_recency_filter: "{{search_recency_filter}}"
       return_images: false
       return_related_questions: false
       temperature: 0.1
-      max_tokens: 1200
+      max_tokens: 1800
     save_as: sonar_results
 
   - name: sonar_gap_fill
     description: "Optional call for expert analysis if primary sources are thin"
     when: "{{needs_gap_fill}}"
     params:
-      max_results: 4
+      max_results: 6
       system_prompt: "{{sonar_analysis}}"
       search_mode: web
       search_recency_filter: day
       return_images: false
       return_related_questions: false
       temperature: 0.2
-      max_tokens: 900
+      max_tokens: 1200
     save_as: sonar_gap_results
 
   - use: llm_analyzer.call
@@ -84,52 +84,55 @@ tool_chain:
         Forschungsevidenz:
         {{evidence_text}}
 
-        EXAKTE STRUKTUR (strikt einhalten):
+        EXAKTE STRUKTUR (genau 3 Abschnitte, strikt einhalten):
 
-        ## TOP STORY
+        ## KURZÜBERBLICK
 
-        **[Prägnante Schlagzeile der wichtigsten Entwicklung]**
+        - Wichtigster Punkt des Tages in einem Satz [1]
+        - Zweiter wichtiger Punkt kurz zusammengefasst [2]
+        - Dritter Kernpunkt mit Fakten [3]
 
-        2-3 Sätze zum wichtigsten Ereignis des Tages. Konkrete Fakten, Zahlen, Zitate. Quellen als [1], [2] am Satzende.
+        (3-4 Bullet Points als Executive Summary. WICHTIG: Verwende Bindestrich "-" für Aufzählungen)
 
-        ## BREAKING
+        ## WICHTIGSTE ENTWICKLUNGEN
 
-        • Vor Xh — Kurze Beschreibung der zeitkritischen Entwicklung [N]
-        • Vor Xh — Weitere aktuelle Meldung [N]
+        ### Erste Entwicklung als Schlagzeile
 
-        (Nur Meldungen der letzten 6 Stunden. Abschnitt weglassen wenn keine aktuellen Meldungen.)
+        Ein Absatz (50-70 Wörter) zu dieser Entwicklung. Konkrete Fakten, Zahlen, Zitate mit Quellenangaben [1][2].
 
-        ## WHAT'S HAPPENING
+        ### Zweite Entwicklung als Schlagzeile
 
-        ### Thema 1
-        Ein Absatz (40-50 Wörter) zu diesem Themenbereich. Konkrete Fakten mit Quellenangaben [N][N].
+        Ein Absatz (50-70 Wörter) zu dieser Entwicklung. Hintergründe und Kontext [3].
 
-        ### Thema 2
-        Ein Absatz (40-50 Wörter) zu diesem Themenbereich. Fakten und Entwicklungen [N].
+        ### Dritte Entwicklung als Schlagzeile
 
-        ### Thema 3
-        Ein Absatz (40-50 Wörter) zu diesem Themenbereich [N][N].
+        Ein Absatz (50-70 Wörter) zu dieser Entwicklung [4][5].
 
-        (Erstelle 3-5 thematische Abschnitte basierend auf der Evidenz)
+        (2-4 Entwicklungen mit Zwischenüberschriften, KEINE Trennlinien zwischen den Absätzen)
 
-        ## BOTTOM LINE
+        ## WEITERE MELDUNGEN
 
-        Ein Satz: Die zentrale Erkenntnis des Tages für Entscheidungsträger.
+        - Kurzmeldung oder Eilmeldung in einem Satz [6]
+        - Weitere relevante Nachricht [7]
+        - Zusätzliche Entwicklung am Rande [8]
+
+        (3-5 Bullet Points für Breaking News, Eilmeldungen. WICHTIG: Verwende Bindestrich "-" für Aufzählungen)
 
         STRIKTE REGELN:
         1. Quellen AUSSCHLIESSLICH als Nummern [1], [2], [3] — NIEMALS Quellennamen im Text
-        2. Keine horizontalen Linien (---)
+        2. KEINE horizontalen Linien (---) zwischen Absätzen
         3. Keine Quellensammlung am Ende — wird automatisch generiert
-        4. Maximal 400 Wörter Gesamtlänge
+        4. Maximal 450 Wörter Gesamtlänge
         5. Jeder Fakt muss eine Quellenangabe haben
-        6. Text endet nach ## BOTTOM LINE
-        7. Überschriften auf Englisch (TOP STORY, BREAKING, WHAT'S HAPPENING, BOTTOM LINE)
+        6. Text endet nach ## WEITERE MELDUNGEN
+        7. Überschriften auf Deutsch (KURZÜBERBLICK, WICHTIGSTE ENTWICKLUNGEN, WEITERE MELDUNGEN)
         8. Inhalt auf Deutsch
+        9. Zwischenüberschriften (###) als kurze, prägnante Schlagzeilen formulieren
     save_as: briefing_content
     phase: finalize
 
 limits:
-  max_results: 20
+  max_results: 30
   max_llm_queries: 2
 
 finalize:
@@ -142,29 +145,29 @@ finalize:
     2. Gibt es widersprüchliche Fakten? Dann sonar_call zur Verifizierung.
     3. Maximal EIN zusätzlicher Tool-Aufruf.
 
-    STRUKTUR (exakt einhalten):
+    STRUKTUR (genau 3 Abschnitte):
 
-    ## TOP STORY
-    **[Schlagzeile]**
-    2-3 Sätze mit [N] Quellen.
+    ## KURZÜBERBLICK
+    - Punkt 1 [1]
+    - Punkt 2 [2]
+    - Punkt 3 [3]
+    (3-4 Bullet Points, Bindestrich "-" verwenden)
 
-    ## BREAKING
-    • Vor Xh — Meldung [N]
-    (Nur wenn Meldungen < 6h alt. Sonst weglassen.)
-
-    ## WHAT'S HAPPENING
-    ### Thema 1
+    ## WICHTIGSTE ENTWICKLUNGEN
+    ### Schlagzeile 1
     Absatz mit [N][N].
-    ### Thema 2
+    ### Schlagzeile 2
     Absatz mit [N].
-    (3-5 Themen)
+    (2-4 Entwicklungen, KEINE Trennlinien)
 
-    ## BOTTOM LINE
-    Ein Satz Fazit.
+    ## WEITERE MELDUNGEN
+    - Meldung [N]
+    - Meldung [N]
+    (3-5 Bullet Points, Bindestrich "-" verwenden)
 
     REGELN:
     - Quellen NUR als [1], [2] — NIEMALS "Tagesschau", "ZDF" etc. im Text
-    - KEINE horizontalen Linien
+    - KEINE horizontalen Linien zwischen Absätzen
     - KEINE Quellensammlung am Ende
-    - Text endet nach BOTTOM LINE
-    - Überschriften Englisch, Inhalt Deutsch
+    - Überschriften auf Deutsch
+    - Bindestrich "-" für Aufzählungen (NICHT "•")

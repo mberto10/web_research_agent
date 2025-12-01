@@ -173,7 +173,7 @@ A [link](https://example.com) here.
     assert 'Source Serif' in html or 'Georgia' in html, "Missing serif font for headlines"
     assert '<strong style="color: #1a1a1a' in html, "Strong not styled with FAZ primary"
     assert 'text-decoration: underline' in html, "Links not styled"
-    assert '<ul style="margin: 0 0 20px 0;' in html, "Lists not styled"
+    assert '<ul style="margin: 0 0 24px 0;' in html, "Lists not styled"
 
     print("  ✅ All markdown elements converted with FAZ inline styles")
     print()

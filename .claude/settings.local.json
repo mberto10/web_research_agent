@@ -88,7 +88,10 @@
       "Bash(export DATABASE_URL:*)",
       "Skill(frontend-design:frontend-design)",
       "WebFetch(domain:www.strichpunkt-design.de)",
-      "WebFetch(domain:brandfetch.com)"
+      "WebFetch(domain:brandfetch.com)",
+      "Bash(if [ -n \"$DATABASE_URL\" ])",
+      "Bash(then echo \"✓ DATABASE_URL is set\")",
+      "Bash(else echo \"✗ DATABASE_URL is not set\")"
     ],
     "deny": [],
     "ask": []

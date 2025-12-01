@@ -144,22 +144,22 @@ def markdown_to_html(markdown_text: str, is_daily_briefing: bool = False) -> str
         # H1 - Main title (rarely used in content)
         (r'<h1>', f'<h1 style="color: {COLORS["primary"]}; font-family: {FONT_SERIF}; font-size: 28px; font-weight: 700; margin: 0 0 16px 0; letter-spacing: -0.02em; line-height: 1.2;">'),
 
-        # H2 - Section headers (TOP STORY, BREAKING, etc.) - Black rule above, no colored underline
-        (r'<h2>', f'<h2 style="color: {COLORS["primary"]}; font-family: {FONT_SANS}; font-size: 11px; font-weight: 600; margin: 36px 0 16px 0; padding-top: 16px; text-transform: uppercase; letter-spacing: 0.12em; border-top: 2px solid {COLORS["rule"]};">'),
+        # H2 - Section headers (KURZÜBERBLICK, WICHTIGSTE ENTWICKLUNGEN, etc.) - Black rule above
+        (r'<h2>', f'<h2 style="color: {COLORS["primary"]}; font-family: {FONT_SANS}; font-size: 12px; font-weight: 600; margin: 40px 0 20px 0; padding-top: 20px; text-transform: uppercase; letter-spacing: 0.1em; border-top: 2px solid {COLORS["rule"]};">'),
 
-        # H3 - Subsection headers (theme names) - Source Serif, tighter tracking
-        (r'<h3>', f'<h3 style="color: {COLORS["primary"]}; font-family: {FONT_SERIF}; font-size: 18px; font-weight: 600; margin: 24px 0 10px 0; letter-spacing: -0.01em; line-height: 1.3;">'),
+        # H3 - Subheadings within sections (story headlines) - LARGER, prominent serif
+        (r'<h3>', f'<h3 style="color: {COLORS["primary"]}; font-family: {FONT_SERIF}; font-size: 22px; font-weight: 700; margin: 28px 0 12px 0; letter-spacing: -0.015em; line-height: 1.25;">'),
 
         # H4 - Minor headers
-        (r'<h4>', f'<h4 style="color: {COLORS["primary"]}; font-family: {FONT_SERIF}; font-size: 16px; font-weight: 600; margin: 20px 0 8px 0; line-height: 1.3;">'),
+        (r'<h4>', f'<h4 style="color: {COLORS["primary"]}; font-family: {FONT_SERIF}; font-size: 18px; font-weight: 600; margin: 24px 0 10px 0; line-height: 1.3;">'),
 
-        # Paragraphs - Source Sans, generous line height
-        (r'<p>', f'<p style="color: {COLORS["text"]}; font-family: {FONT_SANS}; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;">'),
+        # Paragraphs - Source Sans, generous line height, tighter bottom margin for flow
+        (r'<p>', f'<p style="color: {COLORS["text"]}; font-family: {FONT_SANS}; font-size: 16px; line-height: 1.75; margin: 0 0 20px 0;">'),
 
-        # Lists - clean, no colored bullets
-        (r'<ul>', f'<ul style="margin: 0 0 20px 0; padding-left: 0; list-style: none;">'),
-        (r'<ol>', f'<ol style="margin: 0 0 20px 0; padding-left: 24px;">'),
-        (r'<li>', f'<li style="color: {COLORS["text"]}; font-family: {FONT_SANS}; font-size: 15px; line-height: 1.7; margin-bottom: 12px; padding-left: 0;">'),
+        # Lists - clean styling, list-style-type handles the bullet
+        (r'<ul>', f'<ul style="margin: 0 0 24px 0; padding-left: 20px; list-style-type: disc;">'),
+        (r'<ol>', f'<ol style="margin: 0 0 24px 0; padding-left: 24px;">'),
+        (r'<li>', f'<li style="color: {COLORS["text"]}; font-family: {FONT_SANS}; font-size: 16px; line-height: 1.7; margin-bottom: 10px; padding-left: 6px;">'),
 
         # Links - subtle, professional
         (r'<a href="', f'<a style="color: {COLORS["primary"]}; text-decoration: underline; text-decoration-color: {COLORS["accent"]}; text-underline-offset: 2px;" href="'),
@@ -190,12 +190,7 @@ def markdown_to_html(markdown_text: str, is_daily_briefing: bool = False) -> str
     for pattern, replacement in style_mappings:
         html = re.sub(pattern, replacement, html)
 
-    # Post-process: Add bullet character for unordered list items (black, not gold)
-    html = re.sub(
-        r'<li style="([^"]+)">',
-        f'<li style="\\1"><span style="color: {COLORS["primary"]}; margin-right: 10px; font-size: 8px; vertical-align: middle;">●</span>',
-        html
-    )
+    # No additional bullet character needed - using native list-style-type: disc
 
     return html
 
