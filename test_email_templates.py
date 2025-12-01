@@ -16,7 +16,8 @@ def test_strategy_templates():
     """Test that all strategies have proper configurations."""
     print("Testing strategy template configurations...")
 
-    required_keys = ['title_template', 'subtitle_template', 'icon', 'subject_prefix']
+    # FAZ-style templates don't use icons - just clean text prefixes
+    required_keys = ['title_template', 'subtitle_template', 'subject_prefix']
 
     for slug, config in STRATEGY_TEMPLATES.items():
         for key in required_keys:
@@ -56,15 +57,16 @@ def test_citation_extraction():
 
 
 def test_subject_line_generation():
-    """Test strategy-aware subject line generation."""
+    """Test strategy-aware subject line generation (FAZ-style, no emojis)."""
     print("Testing subject line generation...")
 
+    # FAZ-style: Clean, professional subject lines without emojis
     test_cases = [
-        ("news/real_time_briefing", "Breaking News", "🔴 Breaking News:"),
-        ("company/dossier", "Apple Inc", "🏢 Company Report:"),
-        ("financial_research", "Stock Analysis", "📈 Financial Analysis:"),
-        ("daily_news_briefing", "Tech News", "📰 Daily Briefing:"),
-        ("unknown_strategy", "Topic", "🔍 Research Update:"),
+        ("news/real_time_briefing", "Breaking News", "Breaking News:"),
+        ("company/dossier", "Apple Inc", "Company Report:"),
+        ("financial_research", "Stock Analysis", "Financial Analysis:"),
+        ("daily_news_briefing", "Tech News", "Daily Briefing:"),
+        ("unknown_strategy", "Topic", "Research Update:"),
     ]
 
     for strategy, topic, expected_prefix in test_cases:
@@ -112,18 +114,14 @@ def test_complete_email_rendering():
             current_date=current_date
         )
 
-        # Validate HTML structure
+        # Validate HTML structure (FAZ-style)
         assert "<!DOCTYPE html>" in html, "Missing DOCTYPE"
         assert "<html" in html, "Missing html tag"
         assert "Web Research Agent" in html, "Missing footer branding"
-        assert "linear-gradient" in html, "Missing gradient header"
-        assert "Quellensammlung" in html, "Missing citations section"
+        assert "Quellen" in html, "Missing citations section"
         assert "Test Research Topic" in html, "Missing research topic"
-
-        # Check for strategy-specific elements
-        template = STRATEGY_TEMPLATES.get(strategy_slug, {})
-        if template.get('alert_banner'):
-            assert template['alert_banner']['label'] in html, f"Missing alert banner for {strategy_slug}"
+        # FAZ design uses black rules, not gradients
+        assert "#1a1a1a" in html, "Missing FAZ primary color (Cod Gray)"
 
         print(f"  ✅ {strategy_slug}: {len(html)} chars")
 
@@ -147,7 +145,7 @@ def test_complete_email_rendering():
 
 
 def test_markdown_conversion():
-    """Test markdown to HTML conversion with styling."""
+    """Test markdown to HTML conversion with FAZ styling."""
     print("Testing markdown to HTML conversion...")
 
     from api.email_templates import markdown_to_html
@@ -170,15 +168,14 @@ A [link](https://example.com) here.
 
     html = markdown_to_html(markdown)
 
-    # Check for styled elements
-    assert 'style="color: #1a202c;' in html, "H1 not styled"
-    assert 'style="color: #2d3748;' in html, "H2 not styled"
-    assert 'style="color: #4a5568;' in html, "H3 not styled"
-    assert '<strong style="color: #2d3748;' in html, "Strong not styled"
-    assert '<a style="color: #667eea;' in html, "Links not styled"
+    # Check for FAZ-styled elements (using #1a1a1a Cod Gray)
+    assert 'color: #1a1a1a' in html, "H1 not styled with FAZ primary color"
+    assert 'Source Serif' in html or 'Georgia' in html, "Missing serif font for headlines"
+    assert '<strong style="color: #1a1a1a' in html, "Strong not styled with FAZ primary"
+    assert 'text-decoration: underline' in html, "Links not styled"
     assert '<ul style="margin: 0 0 20px 0;' in html, "Lists not styled"
 
-    print("  ✅ All markdown elements converted with inline styles")
+    print("  ✅ All markdown elements converted with FAZ inline styles")
     print()
 
 

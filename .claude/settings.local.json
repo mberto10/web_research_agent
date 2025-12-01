@@ -85,7 +85,10 @@
       "mcp__ide__getDiagnostics",
       "Bash(pip install:*)",
       "Bash(netstat:*)",
-      "Bash(export DATABASE_URL:*)"
+      "Bash(export DATABASE_URL:*)",
+      "Skill(frontend-design:frontend-design)",
+      "WebFetch(domain:www.strichpunkt-design.de)",
+      "WebFetch(domain:brandfetch.com)"
     ],
     "deny": [],
     "ask": []
